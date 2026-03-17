@@ -322,6 +322,8 @@ Example prompt context:
 
 Customers in Denver spent **$57** in January 2025 (45 \+ 12). **Evidence:** E1, E2.
 
+---
+
 **AI Acknowledgement**
 
 ChatGPT was used to polish and enrich this document  
