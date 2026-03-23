@@ -1,0 +1,9 @@
+# Core dependencies
+polars
+numpy
+openai
+hnswlib
+sentence-transformers
+
+# Testing
+pytest
