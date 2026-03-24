@@ -121,7 +121,7 @@ class DataLake:
             ctx.register(name, lf)
         return ctx.execute(sql).collect()
 
-    def get_sample(self, table_name: str, n: int = 10) -> pl.DataFrame:
+    def get_sample(self, table_name: str, n: int = 1000) -> pl.DataFrame:
         """
         Return a small sample from a table.
 
