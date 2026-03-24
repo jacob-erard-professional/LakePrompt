@@ -169,7 +169,8 @@ class LakeProfiler:
         Returns:
             A list of JoinPaths sorted by relevance score.
         """
-        # TODO: Find a way to do this, and ask ppl about what score means in joinpath.
+        # TODO: Find a way to do this, and ask ppl about what score means in joinpath.#
+        # Do u mean join do we execute join path or add to join path to context?
 
 def generate_table_summaries(
     cards_by_table: dict[str, list[ColumnCard]],

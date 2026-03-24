@@ -76,9 +76,11 @@ class LakePrompt:
             A LakeAnswer containing the answer text and the evidence
             tuples that support it.
         """
-        cards   = self.retriever.find_columns(question)
-        paths   = self.profiler.get_join_paths(cards)
-        tuples  = self.executor.get_tuples(question, paths)
+        cards   = self.retriever.find_columns(question) # Relevant columns
+        paths   = self.profiler.get_join_paths(cards) # Join paths with jacard similarity
+        tuples  = self.executor.get_tuples(question, paths) # Executes joins
         context = self.packager.build_context(question, tuples)
         answer  = self._llm_complete(context.prompt)
+        
+        # 
         return LakeAnswer(text=answer, evidence=context.evidence)
