@@ -1,3 +1,10 @@
+import logging
+logger = logging.getLogger(__name__)
+
+from dataclasses import dataclass
+from .datalake import DataLake
+from .models import JoinPath, JoinedTuple
+
 """
 TupleExecutor — Stream S3 of the LakePrompt pipeline.
 
@@ -6,12 +13,6 @@ ranks the resulting rows, and returns the top-r rows as JoinedTuple
 evidence objects for the packager.
 """
 
-import logging
-logger = logging.getLogger(__name__)
-
-from dataclasses import dataclass
-from .datalake import DataLake
-from .models import JoinPath, JoinedTuple
 
 
 DEFAULT_TOP_R = 20
