@@ -197,8 +197,7 @@ class TupleExecutor:
             return []
 
         # lake.query() returns different types depending on the backend.
-        # Normalise to list[dict] immediately so all downstream code is
-        # backend-agnostic.
+        # Normalise to list[dict] immediately so all downstream code is the same regardless of backend.
         if self.lake.backend == "spark":
             rows = [row.asDict() for row in result_df.collect()]
         else:
