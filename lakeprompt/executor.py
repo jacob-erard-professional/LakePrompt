@@ -197,12 +197,7 @@ class TupleExecutor:
             logger.warning("Query failed for path %s: %s", path.tables, exc)
             return []
 
-        # lake.query() returns different types depending on the backend.
-        # Normalise to list[dict] immediately so all downstream code is the same regardless of backend.
-        if self.lake.backend == "spark":
-            rows = [row.asDict() for row in result_df.collect()]
-        else:
-            rows = result_df.to_dicts()
+        rows = result_df.to_dicts()
 
         if not rows:
             logger.warning("Join path %s produced zero rows.", path.tables)

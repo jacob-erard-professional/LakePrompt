@@ -16,7 +16,6 @@ class LakePrompt:
 
     Args:
         lake_dir: Path to the directory containing CSV files.
-        backend: Query backend, either 'polars' (default) or 'spark'.
         model: OpenRouter model string for summary generation.
             Defaults to 'nvidia/nemotron-3-super-120b-a12b:free'.
         cache_path: Optional path to cache generated summaries to disk.
@@ -31,12 +30,11 @@ class LakePrompt:
     def __init__(
         self,
         lake_dir: str,
-        backend: str = "polars",
         model: str = "nvidia/nemotron-3-super-120b-a12b:free",
         cache_path: str = None
     ):
         # 1. Load the lake
-        self.lake = DataLake.load(lake_dir, backend=backend)
+        self.lake = DataLake.load(lake_dir)
 
         # 2. Profile all tables → ColumnCards
         self.profiler = LakeProfiler(self.lake, .8)

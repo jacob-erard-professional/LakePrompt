@@ -11,7 +11,7 @@ LLMs are strong at *language*, but weak at *grounded answering* when the answer 
 * **joining multiple tables**, and  
 * selecting the **right joined rows** (not just any rows) to use as context.
 
-This project builds a system that helps an LLM answer questions about a data lake by **retrieving and packaging “joined tuples” as context**.
+This project builds a system that helps an LLM answer questions about a data lake by **retrieving and packaging “joined tuples” as context**, using a Polars-first execution layer over CSV data.
 
 ---
 

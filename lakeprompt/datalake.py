@@ -7,31 +7,24 @@ class DataLake:
     """
     Central representation of a data lake for use across LakePrompt.
 
-    Scans a directory of CSV files and registers each as a named table.
-    Supports two backends — polars for single-machine workloads (default),
-    and spark for distributed environments.
+    Scans a directory of CSV files and registers each as a named table
+    using Polars lazy frames.
 
     Args:
         lake_dir: Path to the directory containing CSV files.
-        backend: Query engine to use. Either 'polars' (default) or 'spark'.
-            Use polars unless you are working with very large datasets on a
-            distributed cluster. Spark requires pyspark to be installed.
 
     Example:
         >>> lake = DataLake.load("./data/csvs")
-        >>> lake = DataLake.load("./data/csvs", backend="spark")
         >>> lake.query("SELECT * FROM customers WHERE city = 'Denver'")
     """
 
     lake_dir: Path
-    backend: str = "polars"
     tables: dict[str, object] = field(default_factory=dict)    
     cards: list = field(default_factory=list)
     join_graph: dict = field(default_factory=dict)
-    _spark: object = field(default=None, repr=False)
 
     @classmethod
-    def load(cls, lake_dir: str, backend: str = "polars") -> "DataLake":
+    def load(cls, lake_dir: str) -> "DataLake":
         """
         Scan a directory of CSV files and return an initialised DataLake.
 
@@ -41,28 +34,12 @@ class DataLake:
 
         Args:
             lake_dir: Path to the directory containing CSV files.
-            backend: Either 'polars' (default) or 'spark'.
 
         Raises:
             FileNotFoundError: If lake_dir does not exist.
-            ValueError: If no CSV files are found, or if an invalid
-                backend is specified.
-            ImportError: If backend='spark' and pyspark is not installed.
+            ValueError: If no CSV files are found.
         """
-        if backend not in ("polars", "spark"):
-            raise ValueError(
-                f"Invalid backend '{backend}'. Choose 'polars' or 'spark'."
-            )
-        if backend == "spark":
-            try:
-                from pyspark.sql import SparkSession, DataFrame as SparkDataFrame
-            except ImportError:
-                raise ImportError(
-                    "PySpark is not installed. Run `pip install pyspark` "
-                    "or use the default polars backend."
-                )
-                
-        lake = cls(lake_dir=Path(lake_dir), backend=backend)
+        lake = cls(lake_dir=Path(lake_dir))
         lake._load_tables()
         return lake
 
@@ -77,22 +54,8 @@ class DataLake:
         if not csv_files:
             raise ValueError(f"No CSV files found in: {self.lake_dir}")
 
-        if self.backend == "spark":
-            from pyspark.sql import SparkSession
-            self._spark = SparkSession.builder \
-                .appName("LakePrompt") \
-                .getOrCreate()
-            for path in csv_files:
-                name = path.stem
-                df = self._spark.read \
-                    .option("header", "true") \
-                    .option("inferSchema", "true") \
-                    .csv(str(path))
-                df.createOrReplaceTempView(name)
-                self.tables[name] = df
-        else:
-            for path in csv_files:
-                self.tables[path.stem] = pl.scan_csv(str(path))
+        for path in csv_files:
+            self.tables[path.stem] = pl.scan_csv(str(path))
 
     def query(self, sql: str) -> pl.DataFrame:
         """
@@ -100,22 +63,16 @@ class DataLake:
 
         Tables are referenced by their name (filename without extension).
 
-        For the polars backend, supports SELECT, JOIN, WHERE, GROUP BY,
+        Supports SELECT, JOIN, WHERE, GROUP BY,
         ORDER BY, aggregations, CTEs, and subqueries. Window functions
         are not supported — use the Polars expression API directly for those.
-
-        For the spark backend, supports full Spark SQL which is close to
-        ANSI SQL and includes window functions.
 
         Args:
             sql: SQL query referencing one or more table names.
 
         Returns:
-            An eager Polars DataFrame (polars backend) or a Spark DataFrame
-            (spark backend).
+            An eager Polars DataFrame.
         """
-        if self.backend == "spark":
-            return self._spark.sql(sql)
         ctx = pl.SQLContext()
         for name, lf in self.tables.items():
             ctx.register(name, lf)
@@ -125,9 +82,7 @@ class DataLake:
         """
         Return a small sample from a table.
 
-        Preferred over accessing lake.tables directly — always returns a
-        Polars DataFrame regardless of backend, so module code stays
-        backend-agnostic.
+        Preferred over accessing lake.tables directly.
 
         Args:
             table_name: Name of the table to sample.
@@ -143,10 +98,6 @@ class DataLake:
             raise KeyError(
                 f"Table '{table_name}' not found. "
                 f"Available: {list(self.tables.keys())}"
-            )
-        if self.backend == "spark":
-            return pl.from_pandas(
-                self.tables[table_name].limit(n).toPandas()
             )
         return self.tables[table_name].collect().head(n)
 
@@ -177,7 +128,4 @@ class DataLake:
         return set(sample[col].drop_nulls().cast(pl.Utf8).unique().to_list())
 
     def __repr__(self) -> str:
-        return (
-            f"DataLake(tables={list(self.tables.keys())}, "
-            f"backend={self.backend})"
-        )
+        return f"DataLake(tables={list(self.tables.keys())})"
