@@ -1,6 +1,7 @@
 from .datalake import DataLake
 from .models import LakeAnswer, LakeContext
-from .profiler import LakeProfiler, generate_table_summaries
+from .profiler import LakeProfiler
+from .LLM_utilities import generate_table_summaries
 from .retrieval import SemanticRetriever
 from .executor import TupleExecutor
 from .packager import ContextPackager
@@ -42,7 +43,6 @@ class LakePrompt:
 
         # 3. Generate LLM summaries for each table
         summaries = generate_table_summaries(
-            lake=self.lake,
             cards_by_table=self.cards_by_table,
             model=model,
             cache_path=cache_path

@@ -2,6 +2,7 @@
 polars
 numpy
 openai
+anthropic
 hnswlib
 sentence-transformers
 

@@ -71,6 +71,8 @@ class ColumnCard:
         summary: Auto-generated or LLM-generated description of the column.
         table_summary: LLM-generated description of the whole table.
             Shared across all ColumnCards belonging to the same table.
+        jaccard_matches: Mapping from (table_name, column_name) to
+            Jaccard similarity for columns above the profiler threshold.
         embedding: Vector embedding of the summary, filled by
             SemanticRetriever. None until embedded.
     """
@@ -80,4 +82,5 @@ class ColumnCard:
     sample_values: list[Any] = field(default_factory=list)
     summary: str = ""
     table_summary: str = ""
+    jaccard_matches: dict[tuple[str, str], float] = field(default_factory=dict)
     embedding: list[float] | None = None

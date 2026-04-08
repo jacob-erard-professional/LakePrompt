@@ -1,13 +1,5 @@
-import os
-import json
-from openai import OpenAI
 from .datalake import DataLake
 from .models import ColumnCard, JoinPath
-
-from .models import ColumnCard, JoinPath
-
-# TODO: Note to James: Set this up so that when "get_join_paths" is called, everything is already set up
-# I think that when we find jaccard similarities, we just store them as a list in the column cards for every other table
 
 class LakeProfiler:
     """
@@ -22,12 +14,14 @@ class LakeProfiler:
             jaccard_threshold: Threshold for Jaccard similarity between columns.
         """
         self.lake = lake
-        self.jaccard_threshold = jaccard_threshold
+        self._jaccard_threshold = jaccard_threshold
         self.cards_by_table: dict[str, list[ColumnCard]] = {}
 
     def profile(self) -> dict[str, list[ColumnCard]]:
         """
-        Loads every table in the lake and builds a ColumnCard for each column
+        Loads every table in the lake, builds a ColumnCard for each column,
+        and stores qualifying cross-table Jaccard matches directly on each
+        ColumnCard for constant-time lookup at runtime.
         
         Returns:
             Dictionary mapping table name to its list of ColumnCards.
@@ -42,8 +36,10 @@ class LakeProfiler:
                 cards.append(self._build_column_card(table_name, column_name, series))
             cards_by_table[table_name] = cards
 
+        self._populate_jaccard_matches(cards_by_table)
         self.cards_by_table = cards_by_table
         self.lake.cards = [card for cards in cards_by_table.values() for card in cards]
+        self.lake.join_graph = self.build_join_graph(cards_by_table)
         return cards_by_table
     
     def _build_column_card(self, table_name: str, column_name: str, series) -> ColumnCard:
@@ -97,10 +93,47 @@ class LakeProfiler:
         union = len(set_a | set_b)
         return intersection / union if union else 0.0
 
+    def _populate_jaccard_matches(
+        self,
+        cards_by_table: dict[str, list[ColumnCard]],
+    ) -> None:
+        """
+        Compute and store all qualifying cross-table Jaccard matches on
+        ColumnCards using compact (table_name, column_name) lookup keys.
+        """
+        table_names = list(cards_by_table.keys())
+        value_cache: dict[tuple[str, str], set[str]] = {}
+        card_index: dict[tuple[str, str], ColumnCard] = {}
+
+        for table_name, cards in cards_by_table.items():
+            for card in cards:
+                card_key = (table_name, card.column_name)
+                card_index[card_key] = card
+                value_cache[card_key] = self.lake.get_column_values(*card_key)
+
+        for i, left_table in enumerate(table_names):
+            for right_table in table_names[i + 1:]:
+                for left_card in cards_by_table[left_table]:
+                    left_key = (left_table, left_card.column_name)
+                    left_values = value_cache[left_key]
+
+                    for right_card in cards_by_table[right_table]:
+                        right_key = (right_table, right_card.column_name)
+                        score = self.jaccard_similarity(
+                            left_values,
+                            value_cache[right_key],
+                        )
+
+                        if score < self._jaccard_threshold:
+                            continue
+
+                        card_index[left_key].jaccard_matches[right_key] = score
+                        card_index[right_key].jaccard_matches[left_key] = score
+
     def build_join_graph(self, cards_by_table: dict[str, list[ColumnCard]]):
         """
-        Compares every column pair across all table combinations and adds
-        an edge to the join graph when Jaccard score meets the threshold.
+        Build a table-level join graph from the Jaccard matches already
+        stored on each ColumnCard.
 
         Args:
             cards_by_table: Output from profile().
@@ -111,45 +144,17 @@ class LakeProfiler:
         """
         table_names = list(cards_by_table.keys())
         graph: dict[str, list[dict[str, object]]] = {t: [] for t in table_names}
-        value_cache: dict[tuple[str, str], set[str]] = {}
 
-        for i, left_table in enumerate(table_names):
-            for right_table in table_names[i + 1:]:
-                left_cards = cards_by_table[left_table]
-                right_cards = cards_by_table[right_table]
+        for left_table, left_cards in cards_by_table.items():
+            for left_card in left_cards:
+                for (right_table, right_column), score in left_card.jaccard_matches.items():
+                    graph[left_table].append({
+                        "to_table": right_table,
+                        "left_column": left_card.column_name,
+                        "right_column": right_column,
+                        "score": score,
+                    })
 
-                for left_card in left_cards:
-                    left_key = (left_table, left_card.column_name)
-                    if left_key not in value_cache:
-                        value_cache[left_key] = self.lake.get_column_values(*left_key)
-
-                    for right_card in right_cards:
-                        right_key = (right_table, right_card.column_name)
-                        if right_key not in value_cache:
-                            value_cache[right_key] = self.lake.get_column_values(*right_key)
-
-                        score = self.jaccard_similarity(
-                            value_cache[left_key],
-                            value_cache[right_key],
-                        )
-
-                        if score >= self.jaccard_threshold:
-                            left_edge = {
-                                "to_table": right_table,
-                                "left_column": left_card.column_name,
-                                "right_column": right_card.column_name,
-                                "score": score,
-                            }
-                            right_edge = {
-                                "to_table": left_table,
-                                "left_column": right_card.column_name,
-                                "right_column": left_card.column_name,
-                                "score": score,
-                            }
-                            graph[left_table].append(left_edge)
-                            graph[right_table].append(right_edge)
-
-        self.lake.join_graph = graph
         return graph
 
     def get_join_paths(
@@ -171,89 +176,3 @@ class LakeProfiler:
         """
         # TODO: Find a way to do this, and ask ppl about what score means in joinpath.#
         # Do u mean join do we execute join path or add to join path to context?
-
-def generate_table_summaries(
-    cards_by_table: dict[str, list[ColumnCard]],
-    batch_size: int = 5,
-    model: str = "nvidia/nemotron-3-super-120b-a12b:free",
-    cache_path: str = None
-) -> dict[str, str]:
-    """
-    Generate natural language summaries for all tables in the lake.
-
-    Sends tables to the LLM in batches to reduce API calls. Results are
-    optionally cached to disk so summaries are not regenerated on every run.
-    
-    If cache_path is provided and the file exists, previously generated
-    summaries are loaded from disk and only tables missing from the cache
-    are sent to the LLM. If all tables are already cached, no API call
-    is made at all. Results are saved back to the cache after each run,
-    so adding a new table to the lake only costs one incremental API call.
-
-    Args:
-        cards_by_table: Dictionary mapping table name to its ColumnCards.
-        batch_size: Number of tables per API call. Defaults to 5.
-        model: OpenRouter model string. Defaults to 'nvidia/nemotron-3-super-120b-a12b:free'.
-        cache_path: Optional path to a JSON cache file.
-
-    Returns:
-        Dictionary mapping table name to its generated summary string.
-    """
-    if cache_path and os.path.exists(cache_path):
-        with open(cache_path) as f:
-            summaries = json.load(f)
-        remaining = {t: c for t, c in cards_by_table.items() if t not in summaries}
-        if not remaining:
-            return summaries
-    else:
-        summaries = {}
-        remaining = cards_by_table
-
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ["OPENROUTER_API_KEY"]
-    )
-
-    table_names = list(remaining.keys())
-    batches = [table_names[i:i + batch_size] for i in range(0, len(table_names), batch_size)]
-
-    for batch in batches:
-        batch_descriptions = ""
-        for table_name in batch:
-            col_text = "\n".join(
-                f"  - {c.column_name} ({c.dtype}): {c.sample_values[:5]}"
-                for c in remaining[table_name]
-            )
-            batch_descriptions += f"Table: '{table_name}'\n{col_text}\n\n"
-
-        prompt = (
-            f"""
-            You are helping to document a data lake.
-
-        Below are several tables with their column names and sample values.
-        For each table, write a single concise sentence describing what it represents
-        in plain English. Do not mention column names directly.
-
-        {batch_descriptions}
-        Respond in JSON format like this:
-        {{
-        "table_name_1": "summary here",
-        "table_name_2": "summary here"
-        }}
-        Only include the JSON in your response, nothing else."""
-        )
-
-        response = client.chat.completions.create(
-            model=model,
-            max_tokens=500,
-            messages=[{"role": "user", "content": prompt}]
-        )
-
-        summaries.update(json.loads(response.choices[0].message.content.strip()))
-
-    if cache_path:
-        with open(cache_path, "w") as f:
-            json.dump(summaries, f, indent=2)
-
-    return summaries
-
