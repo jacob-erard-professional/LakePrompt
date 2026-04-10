@@ -4,6 +4,7 @@ logger = logging.getLogger(__name__)
 from dataclasses import dataclass
 from .datalake import DataLake
 from .models import JoinPath, JoinedTuple
+from .LLM_utilities import apply_llm_filters_to_sql
 
 """
 TupleExecutor — Stream S3 of the LakePrompt pipeline.
@@ -65,10 +66,7 @@ class TupleExecutor:
         all_scored: list[tuple[float, dict, JoinPath]] = []
 
         for path in paths:
-            # TODO: push down filters extracted from the question before executing
-            # join to have smaller outputs.
-            # See _extract_filters (not yet implemented).
-            rows = self._execute_path(path)
+            rows = self._execute_path(path, question=question)
             if not rows:
                 continue
 
@@ -172,13 +170,20 @@ class TupleExecutor:
         return result
 
     # Execution of joins and retrieval of rows
-    def _execute_path(self, path: JoinPath, filter_clause: str = "") -> list[dict]:
+    def _execute_path(
+        self, path: JoinPath, question: str = "", filter_clause: str = ""
+    ) -> list[dict]:
         """
         Build and execute SQL for a join path, returning rows as list[dict].
 
+        If a question is provided and no explicit filter_clause is given,
+        the raw join SQL is first refined by _extract_filters before execution.
+
         Args:
             path: The join path to execute.
-            filter_clause: Optional SQL WHERE fragment.
+            question: Optional natural language question used to infer filters.
+            filter_clause: Optional SQL WHERE fragment. When provided, skips
+                LLM-based filter extraction and uses this clause directly.
 
         Returns:
             A (possibly empty) list of row dicts.
@@ -188,6 +193,9 @@ class TupleExecutor:
         except ValueError as exc:
             logger.warning("Skipping malformed JoinPath: %s", exc)
             return []
+
+        if question and not filter_clause:
+            sql = self._extract_filters(question, sql, path)
 
         logger.debug("Executing SQL:\n%s", sql)
 
@@ -203,6 +211,38 @@ class TupleExecutor:
             logger.warning("Join path %s produced zero rows.", path.tables)
 
         return rows
+
+    def _extract_filters(self, question: str, sql: str, path: JoinPath) -> str:
+        """
+        Refine a raw join SQL query with filters inferred from the question.
+
+        Passes the question, the raw SQL, and the ColumnCards for the path's
+        tables to apply_llm_filters_to_sql. Falls back to the original SQL if
+        the LLM call fails or returns an invalid result.
+
+        Args:
+            question: The natural language question driving retrieval.
+            sql: Raw join SQL produced by _build_join_sql.
+            path: The join path whose tables determine which cards to pass.
+
+        Returns:
+            The refined SQL string with filters added, or the original sql
+            if refinement fails.
+        """
+        path_table_set = set(path.tables)
+        involved_cards = [
+            card
+            for card in (getattr(self.lake, "cards", None) or [])
+            if card.table_name in path_table_set
+        ]
+
+        try:
+            return apply_llm_filters_to_sql(question, sql, involved_cards)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Filter extraction failed for path %s: %s", path.tables, exc
+            )
+            return sql
 
     # Ranking rows based on ColumnCard similarity
     def _embed_question(self, question: str) -> "np.ndarray | None":  # type: ignore[name-defined]
