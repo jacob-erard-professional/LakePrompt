@@ -117,7 +117,7 @@ class SpiderJoinEvaluation:
         schema_limit: int = 3,
         questions_per_schema: int = 3,
         sample_rows: int = 3,
-        lakeprompt_model: str = "nvidia/nemotron-3-super-120b-a12b:free",
+        lakeprompt_model: str = DEFAULT_CLAUDE_MODEL,
         cache_path: str | None = None,
     ) -> dict[str, Any]:
         """
@@ -133,8 +133,8 @@ class SpiderJoinEvaluation:
             questions_per_schema: Number of generated questions per schema.
             sample_rows: Number of sample rows per table to include in
                 schema summaries sent to Claude.
-            lakeprompt_model: Model string passed into LakePrompt for table
-                summary generation.
+            lakeprompt_model: Claude model string passed into LakePrompt for
+                table summary generation and answer completion.
             cache_path: Optional summary-cache path forwarded to LakePrompt.
 
         Returns:
@@ -516,7 +516,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--lakeprompt-model",
-        default="nvidia/nemotron-3-super-120b-a12b:free",
+        default=DEFAULT_CLAUDE_MODEL,
         help="Model string passed into LakePrompt for table summarization.",
     )
     parser.add_argument(

@@ -9,12 +9,13 @@ import json
 import os
 import re
 
-from openai import OpenAI
+import anthropic
 
 from .models import ColumnCard
 
 
 _BARE_STRING_PATTERN = re.compile(r"^[A-Za-z0-9_./:-]+$")
+DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
 
 def _is_scalar(value: object) -> bool:
@@ -203,10 +204,32 @@ def _package_with_toon(
     )
 
 
+def _build_anthropic_client() -> anthropic.Anthropic:
+    """
+    Build an Anthropic client from environment configuration.
+
+    Raises:
+        ValueError: If `ANTHROPIC_API_KEY` is not set.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ValueError("ANTHROPIC_API_KEY is not set.")
+    return anthropic.Anthropic(api_key=api_key)
+
+
+def _response_text(message: anthropic.types.Message) -> str:
+    """
+    Concatenate text blocks from an Anthropic Messages API response.
+    """
+    return "".join(
+        block.text for block in message.content if getattr(block, "type", None) == "text"
+    ).strip()
+
+
 def generate_table_summaries(
     cards_by_table: dict[str, list[ColumnCard]],
     batch_size: int = 5,
-    model: str = "nvidia/nemotron-3-super-120b-a12b:free",
+    model: str = DEFAULT_CLAUDE_MODEL,
     cache_path: str = None,
 ) -> dict[str, str]:
     """
@@ -218,7 +241,7 @@ def generate_table_summaries(
     Args:
         cards_by_table: Dictionary mapping table name to its ColumnCards.
         batch_size: Number of tables per API call.
-        model: OpenRouter model string.
+        model: Anthropic Claude model string.
         cache_path: Optional path to a JSON cache file.
 
     Returns:
@@ -234,10 +257,7 @@ def generate_table_summaries(
         summaries = {}
         remaining = cards_by_table
 
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ["OPENROUTER_API_KEY"],
-    )
+    client = _build_anthropic_client()
 
     table_names = list(remaining.keys())
     batches = [table_names[i:i + batch_size] for i in range(0, len(table_names), batch_size)]
@@ -260,12 +280,13 @@ def generate_table_summaries(
             response_format='{"table_name_1":"summary","table_name_2":"summary"}',
         )
 
-        response = client.chat.completions.create(
+        response = client.messages.create(
             model=model,
             max_tokens=500,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
-        summaries.update(json.loads(response.choices[0].message.content.strip()))
+        summaries.update(json.loads(_response_text(response)))
 
     if cache_path:
         with open(cache_path, "w", encoding="utf-8") as handle:
@@ -278,7 +299,7 @@ def apply_llm_filters_to_sql(
     question: str,
     sql_query: str,
     involved_cards: list[ColumnCard],
-    model: str = "nvidia/nemotron-3-super-120b-a12b:free",
+    model: str = DEFAULT_CLAUDE_MODEL,
 ) -> str:
     """
     Ask an LLM to refine an existing SQL join query with filters and
@@ -293,15 +314,12 @@ def apply_llm_filters_to_sql(
         question: Original natural-language user question.
         sql_query: Existing SQL query whose joins should remain unchanged.
         involved_cards: ColumnCards for the tables referenced by the query.
-        model: OpenRouter model string.
+        model: Anthropic Claude model string.
 
     Returns:
         The refined SQL query. If parsing fails, returns the original query.
     """
-    client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.environ["OPENROUTER_API_KEY"],
-    )
+    client = _build_anthropic_client()
 
     payload = {
         "question": question,
@@ -327,12 +345,13 @@ def apply_llm_filters_to_sql(
         response_format='{"refined_sql":"SELECT ..."}',
     )
 
-    response = client.chat.completions.create(
+    response = client.messages.create(
         model=model,
         max_tokens=700,
+        temperature=0,
         messages=[{"role": "user", "content": prompt}],
     )
-    raw = response.choices[0].message.content.strip()
+    raw = _response_text(response)
 
     try:
         parsed = json.loads(raw)

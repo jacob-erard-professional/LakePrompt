@@ -2,7 +2,7 @@ import numpy as np
 import hnswlib
 from sentence_transformers import SentenceTransformer
 
-from .datalake import DataLake
+from .datalake import _DataLake
 from .models import ColumnCard
 
 
@@ -19,7 +19,7 @@ class SemanticRetriever:
     DataProfiler.get_join_paths() and TupleExecutor.
 
     Args:
-        lake: The shared DataLake instance.
+        lake: The shared internal lake instance.
         cards_by_table: Dictionary mapping table name to its ColumnCards,
             as produced by DataProfiler.profile_lake().
         model_name: SBERT model to use for embedding. Defaults to
@@ -33,7 +33,7 @@ class SemanticRetriever:
 
     def __init__(
         self,
-        lake: DataLake,
+        lake: _DataLake,
         cards_by_table: dict[str, list[ColumnCard]],
         model_name: str = "all-MiniLM-L6-v2"
     ):

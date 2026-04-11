@@ -1,4 +1,4 @@
-from .datalake import DataLake
+from .datalake import _DataLake
 from .models import JoinedTuple, LakeContext
 from .LLM_utilities import _package_with_toon
 
@@ -9,14 +9,14 @@ class ContextPackager:
     token-budgeted, TOON-encoded prompt ready for the LLM.
 
     Args:
-        lake: The active DataLake instance (reserved for future use,
+        lake: The active internal lake instance (reserved for future use,
             e.g. fetching additional rows if the budget allows).
         max_tokens: Soft upper bound on prompt length in tokens.
             Evidence rows are dropped from the tail until the prompt
             fits within this budget.
     """
 
-    def __init__(self, lake: DataLake, max_tokens: int = 3_000):
+    def __init__(self, lake: _DataLake, max_tokens: int = 3_000):
         self.lake = lake
         self.max_tokens = max_tokens
 

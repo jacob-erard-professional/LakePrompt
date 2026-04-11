@@ -1,9 +1,10 @@
 import json
 import os
 
-from openai import OpenAI
+import anthropic
 
-from .datalake import DataLake
+from .datalake import _DataLake
+from .LLM_utilities import DEFAULT_CLAUDE_MODEL
 from .models import LakeAnswer
 from .profiler import LakeProfiler
 from .LLM_utilities import generate_table_summaries
@@ -22,8 +23,8 @@ class LakePrompt:
 
     Args:
         lake_dir: Path to the directory containing CSV files.
-        model: OpenRouter model string for summary generation.
-            Defaults to 'nvidia/nemotron-3-super-120b-a12b:free'.
+        model: Anthropic Claude model string for summary generation and answering.
+            Defaults to 'claude-sonnet-4-20250514'.
         cache_path: Optional path to cache generated summaries to disk.
 
     Example:
@@ -36,11 +37,11 @@ class LakePrompt:
     def __init__(
         self,
         lake_dir: str,
-        model: str = "nvidia/nemotron-3-super-120b-a12b:free",
+        model: str = DEFAULT_CLAUDE_MODEL,
         cache_path: str = None
     ):
         # 1. Load the lake
-        self.lake = DataLake.load(lake_dir)
+        self.lake = _DataLake.load(lake_dir)
 
         # 2. Profile all tables → ColumnCards
         self.profiler = LakeProfiler(self.lake, .8)
@@ -104,17 +105,21 @@ class LakePrompt:
             The answer string extracted from the model's JSON response,
             or the raw response content if JSON parsing fails.
         """
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.environ["OPENROUTER_API_KEY"],
-        )
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            raise ValueError("ANTHROPIC_API_KEY is not set.")
+        client = anthropic.Anthropic(api_key=api_key)
 
-        response = client.chat.completions.create(
+        response = client.messages.create(
             model=self.model,
+            max_tokens=1000,
+            temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
 
-        raw = response.choices[0].message.content.strip()
+        raw = "".join(
+            block.text for block in response.content if getattr(block, "type", None) == "text"
+        ).strip()
 
         try:
             parsed = json.loads(raw)

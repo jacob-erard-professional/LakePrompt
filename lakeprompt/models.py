@@ -1,6 +1,23 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+
+@dataclass(frozen=True)
+class JoinEdge:
+    """
+    A single directed join edge between two tables.
+
+    Stored in join paths and provenance so later pipeline stages can
+    reconstruct the exact join chain used to produce a row.
+    """
+
+    left_table: str
+    left_column: str
+    right_table: str
+    right_column: str
+    score: float
+
+
 @dataclass
 class JoinPath:
     """
@@ -9,10 +26,26 @@ class JoinPath:
     Produced by DataProfiler.get_join_paths() and consumed by
     TupleExecutor.get_tuples().
     """
+    path_id: str
     tables: list[str]
     join_keys: list[tuple[str, str, str, str]]  # (t1, col1, t2, col2)
     score: float
-    estimated_output_rows: int
+    estimated_output_rows: int | None
+    join_edges: list[JoinEdge] = field(default_factory=list)
+
+
+@dataclass
+class JoinProvenance:
+    """
+    Structured provenance for an evidence tuple.
+
+    Carries the exact join path metadata promised by the proposal.
+    """
+
+    path_id: str
+    tables: list[str]
+    join_keys: list[tuple[str, str, str, str]]
+    path_score: float
 
 
 @dataclass
@@ -24,7 +57,7 @@ class JoinedTuple:
     """
     evidence_id: str
     data: dict[str, Any]
-    provenance: list[str]
+    provenance: JoinProvenance
     join_path: JoinPath
     relevance_score: float
 

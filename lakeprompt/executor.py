@@ -2,14 +2,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 from dataclasses import dataclass
-from .datalake import DataLake
+from .datalake import _DataLake
 from .models import JoinPath, JoinedTuple
 from .LLM_utilities import apply_llm_filters_to_sql
 
 """
 TupleExecutor — Stream S3 of the LakePrompt pipeline.
 
-Receives JoinPath objects, executes the joins against the DataLake,
+Receives JoinPath objects, executes the joins against the internal lake,
 ranks the resulting rows, and returns the top-r rows as JoinedTuple
 evidence objects for the packager.
 """
@@ -25,7 +25,7 @@ _ST_MODEL: object = None
 @dataclass
 class TupleExecutor:
     """
-    Executes join paths against the DataLake and returns ranked evidence tuples.
+    Executes join paths against the internal lake and returns ranked evidence tuples.
 
     Rows are scored by the average cosine similarity between the question
     embedding and the ColumnCard embeddings for the path's tables.  All rows
@@ -33,10 +33,10 @@ class TupleExecutor:
     across paths rather than within them.
 
     Args:
-        lake: An initialised DataLake instance.
+        lake: An initialised internal lake instance.
     """
 
-    lake: DataLake
+    lake: _DataLake
 
     # Public API
     def get_tuples(
@@ -90,7 +90,7 @@ class TupleExecutor:
             filter_clause: Optional SQL WHERE fragment (no 'WHERE' keyword).
 
         Returns:
-            A complete SQL query string ready for DataLake.query().
+            A complete SQL query string ready for the lake query engine.
 
         Raises:
             ValueError: If path.tables contains fewer than two entries.
