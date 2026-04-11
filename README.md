@@ -33,14 +33,11 @@ References:
 
 ## User Interface
 
-The library currently exposes two main user-facing entry points:
+The main user-facing interface is `LakePrompt`. A user provides a directory of CSV files, asks a natural-language question, and receives a `LakeAnswer` containing both the answer text and the supporting evidence rows.
 
-- `DataLake` for loading a directory of CSV files and querying them directly with SQL.
-- `LakePrompt` for asking natural-language questions over that same CSV lake.
+### What the user provides
 
-### 1. Load a CSV lake
-
-Put your CSV files in one directory:
+LakePrompt expects a directory containing one or more CSV files:
 
 ```text
 data/
@@ -49,98 +46,71 @@ data/
   products.csv
 ```
 
-Then load them with `DataLake`:
+Each file becomes a table internally, using the filename without the `.csv` extension as the table name.
 
-```python
-from lakeprompt import DataLake
+### Required setup
 
-lake = DataLake.load("./data")
-print(lake)
-```
-
-Each CSV is registered as a table using its filename without the `.csv` extension.
-
-### 2. Query the lake directly with SQL
-
-Use `DataLake.query(...)` when you want direct structured access:
-
-```python
-from lakeprompt import DataLake
-
-lake = DataLake.load("./data")
-
-result = lake.query("""
-SELECT c.customer_id, c.customer_name, SUM(o.total) AS revenue
-FROM customers c
-JOIN orders o ON c.customer_id = o.customer_id
-GROUP BY c.customer_id, c.customer_name
-ORDER BY revenue DESC
-LIMIT 5
-""")
-
-print(result)
-```
-
-This returns a Polars `DataFrame`.
-
-You can also inspect a table sample:
-
-```python
-sample = lake.get_sample("customers", n=10)
-print(sample)
-```
-
-### 3. Ask natural-language questions with `LakePrompt`
-
-`LakePrompt` is the higher-level interface. It:
-
-- loads the CSV lake,
-- profiles columns,
-- generates table summaries,
-- builds retrieval indexes,
-- finds relevant join paths,
-- executes candidate joins,
-- packages the evidence,
-- and asks the LLM for a final answer.
-
-Basic usage:
-
-```python
-from lakeprompt import LakePrompt
-
-lp = LakePrompt("./data")
-answer = lp.query("Which customers spent the most in January?")
-
-print(answer.text)
-print(answer.evidence)
-```
-
-`lp.query(...)` returns a `LakeAnswer` object with:
-
-- `answer.text`: the model's natural-language answer
-- `answer.evidence`: the joined tuples used as supporting evidence
-
-### 4. Required setup for `LakePrompt`
-
-`LakePrompt` uses Anthropic for table summarization and final answer generation, so you must set:
+`LakePrompt` calls Anthropic during table summarization and final answer generation, so the environment must include:
 
 ```bash
 export ANTHROPIC_API_KEY="your_api_key_here"
 ```
 
-You can also choose a model and optionally cache generated table summaries:
+### Constructor interface
 
 ```python
 from lakeprompt import LakePrompt
 
 lp = LakePrompt(
-    "./data",
+    lake_dir="./data",
     model="claude-sonnet-4-20250514",
     cache_path="./table_summaries.json",
 )
 ```
 
-### 5. Minimal end-to-end example
+Constructor arguments:
+
+- `lake_dir`: path to the directory containing CSV files
+- `model`: Anthropic model name used for summarization and answer generation
+- `cache_path`: optional JSON cache file for generated table summaries
+
+### Query interface
+
+Once initialized, the user interacts with the library through `query(...)`:
+
+```python
+from lakeprompt import LakePrompt
+
+lp = LakePrompt("./data", cache_path="./table_summaries.json")
+answer = lp.query("Which customers spent the most in January?")
+```
+
+This runs the full pipeline:
+
+- load the CSV lake
+- profile columns
+- generate table summaries
+- retrieve relevant columns
+- infer join paths
+- execute candidate joins
+- package evidence for the prompt
+- ask the LLM for the final response
+
+### Return value
+
+`query(...)` returns a `LakeAnswer` object:
+
+```python
+print(answer.text)
+print(answer.evidence)
+```
+
+Its fields are:
+
+- `answer.text`: the natural-language answer returned by the model
+- `answer.evidence`: a list of evidence rows used to support that answer
+
+### Minimal end-to-end example
 
 ```python
 from lakeprompt import LakePrompt
@@ -151,12 +121,14 @@ answer = lp.query("What are the top 3 products by total sales?")
 print("Answer:")
 print(answer.text)
 
-print("\nEvidence rows:")
+print("\nEvidence:")
 for row in answer.evidence[:3]:
-    print(row)
+    print(row.evidence_id, row.data)
 ```
 
-In short:
+### Typical usage flow
 
-- use `DataLake` if you want direct SQL access to the CSV tables
-- use `LakePrompt` if you want question-answering over the lake with retrieved evidence
+1. Place related CSV files in one directory.
+2. Initialize `LakePrompt` with that directory.
+3. Call `query(...)` with a natural-language question.
+4. Read `answer.text` for the response and `answer.evidence` for supporting tuples.
