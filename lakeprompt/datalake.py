@@ -8,7 +8,11 @@ class DataLake:
     Central representation of a data lake for use across LakePrompt.
 
     Scans a directory of CSV files and registers each as a named table
-    using Polars lazy frames.
+    using Polars lazy frames. This class exists so every pipeline stage
+    works from one consistent abstraction instead of passing raw file
+    paths or ad hoc DataFrames around. Centralizing loading, sampling,
+    and SQL execution reduces duplication and makes later stages easier
+    to test and reason about.
 
     Args:
         lake_dir: Path to the directory containing CSV files.
@@ -32,8 +36,15 @@ class DataLake:
         (e.g. 'customers.csv' → 'customers'). Tables are loaded lazily —
         no data is read into memory until a query or sample is requested.
 
+        This factory is needed so the rest of the system can assume the
+        lake is fully registered and ready for profiling, retrieval, and
+        query execution from a single call.
+
         Args:
             lake_dir: Path to the directory containing CSV files.
+
+        Returns:
+            A `DataLake` populated with one lazy Polars frame per CSV.
 
         Raises:
             FileNotFoundError: If lake_dir does not exist.
@@ -44,7 +55,16 @@ class DataLake:
         return lake
 
     def _load_tables(self) -> None:
-        """Load all CSV files in lake_dir as named tables."""
+        """
+        Load all CSV files in `lake_dir` as named lazy tables.
+
+        This internal helper keeps filesystem validation and registration
+        logic in one place, which makes initialization behavior easier to
+        maintain.
+
+        Returns:
+            None. The method mutates `self.tables` in place.
+        """
         if not self.lake_dir.exists():
             raise FileNotFoundError(
                 f"Lake directory not found: {self.lake_dir}"
@@ -63,15 +83,16 @@ class DataLake:
 
         Tables are referenced by their name (filename without extension).
 
-        Supports SELECT, JOIN, WHERE, GROUP BY,
-        ORDER BY, aggregations, CTEs, and subqueries. Window functions
-        are not supported — use the Polars expression API directly for those.
+        Supports SELECT, JOIN, WHERE, GROUP BY, ORDER BY, aggregations,
+        CTEs, and subqueries. This method is needed because later stages
+        produce SQL-shaped plans; keeping execution here gives the project
+        one consistent bridge between planning and actual table access.
 
         Args:
             sql: SQL query referencing one or more table names.
 
         Returns:
-            An eager Polars DataFrame.
+            An eager Polars DataFrame containing the query result.
         """
         ctx = pl.SQLContext()
         for name, lf in self.tables.items():
@@ -82,11 +103,13 @@ class DataLake:
         """
         Return a small sample from a table.
 
-        Preferred over accessing lake.tables directly.
+        Preferred over accessing `lake.tables` directly. Sampling is needed
+        by profiling, summary generation, and join discovery because those
+        stages need representative values without materializing full tables.
 
         Args:
             table_name: Name of the table to sample.
-            n: Number of rows to return. Defaults to 100.
+            n: Maximum number of rows to return. Defaults to 1000.
 
         Returns:
             An eager Polars DataFrame with at most n rows.
@@ -106,14 +129,17 @@ class DataLake:
         Return the unique string-cast values of a column from a sample.
 
         Used by DataProfiler.jaccard_similarity() to compute value-set
-        overlap between columns across tables.
+        overlap between columns across tables. This helper is needed so
+        join detection compares columns in a uniform, null-safe way even
+        when source files use different physical dtypes.
 
         Args:
             table_name: Name of the table containing the column.
             col: Name of the column.
 
         Returns:
-            A set of unique, null-dropped, string-cast values.
+            A set of unique, null-dropped, string-cast values drawn from
+            the sampled table data.
 
         Raises:
             KeyError: If table_name is not found.

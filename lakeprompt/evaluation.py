@@ -18,6 +18,20 @@ DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
 @dataclass
 class EvaluationExample:
+    """
+    One recorded evaluation example for later inspection.
+
+    Attributes:
+        schema_id: Identifier of the evaluated schema.
+        question: Generated natural-language question.
+        join_metadata: Join metadata associated with the schema.
+        baseline_prompt: Prompt used for the baseline condition.
+        baseline_answer: Model answer in the baseline condition.
+        lakeprompt_context: Evidence returned by LakePrompt.
+        lakeprompt_answer: Model answer using LakePrompt evidence.
+        lakeprompt_evidence_count: Number of evidence rows returned.
+        lakeprompt_error: Optional error string captured during execution.
+    """
     schema_id: str
     question: str
     join_metadata: dict[str, Any]
@@ -30,7 +44,12 @@ class EvaluationExample:
 
 
 class ClaudeClient:
-    """Thin wrapper around the Anthropic Messages API."""
+    """
+    Thin wrapper around the Anthropic Messages API.
+
+    This wrapper is needed so evaluation code can request completions
+    without repeating environment and response-handling boilerplate.
+    """
 
     def __init__(self, model: str = DEFAULT_CLAUDE_MODEL):
         """
@@ -60,6 +79,9 @@ class ClaudeClient:
         """
         Send a single prompt to Claude and return concatenated text output.
 
+        This helper keeps all evaluation-time prompting on one small,
+        consistent interface.
+
         Args:
             system: System instruction for the request.
             prompt: User-visible prompt content.
@@ -85,6 +107,9 @@ class SpiderJoinEvaluation:
     """
     Generates join-requiring questions for Spider Join schemas and records
     baseline vs LakePrompt answers to JSON and TXT outputs.
+
+    This class is needed because the project proposal depends on empirical
+    comparison, not just a working pipeline.
     """
 
     def __init__(
@@ -226,6 +251,9 @@ class SpiderJoinEvaluation:
         """
         Load Spider join metadata rows from CSV.
 
+        This helper is needed so dataset-specific join hints are available
+        during question generation.
+
         Returns:
             A list of metadata records keyed by CSV header.
         """
@@ -239,6 +267,9 @@ class SpiderJoinEvaluation:
     ) -> dict[str, list[dict[str, str]]]:
         """
         Group metadata rows by schema identifier up to a configured limit.
+
+        This method is needed so evaluation can operate at the schema level
+        instead of mixing unrelated joins from different datasets.
 
         Args:
             rows: Raw metadata records from the CSV file.
@@ -264,6 +295,8 @@ class SpiderJoinEvaluation:
         """
         Extract the schema identifier from a metadata row.
 
+        This helper improves resilience to different metadata column names.
+
         Args:
             row: One metadata record from `dev_metadata.csv`.
 
@@ -280,6 +313,9 @@ class SpiderJoinEvaluation:
     def _resolve_schema_dir(self, schema_id: str) -> Path:
         """
         Resolve a schema id to its directory of CSV files.
+
+        This method is needed because Spider-derived datasets can use
+        slightly different directory layouts.
 
         Args:
             schema_id: Spider schema/database identifier.
@@ -305,6 +341,9 @@ class SpiderJoinEvaluation:
     def _build_schema_description(self, schema_dir: Path, sample_rows: int) -> str:
         """
         Build a compact natural-language schema summary from CSV files.
+
+        This helper is needed so question generation and baseline answering
+        can see a lightweight textual description of each schema.
 
         Args:
             schema_dir: Directory containing a schema's CSV tables.
@@ -337,6 +376,10 @@ class SpiderJoinEvaluation:
     ) -> list[str]:
         """
         Ask Claude to generate join-requiring questions for one schema.
+
+        This method is needed because the project wants multi-table
+        evaluation questions even when a hand-written benchmark is not yet
+        available.
 
         Args:
             schema_id: Schema/database identifier.
@@ -389,6 +432,9 @@ class SpiderJoinEvaluation:
         """
         Build the baseline prompt without LakePrompt evidence.
 
+        This prompt isolates the value of LakePrompt by giving the model
+        only schema-level context.
+
         Args:
             schema_description: Raw schema and sample-row context.
             question: Natural-language evaluation question.
@@ -410,6 +456,9 @@ class SpiderJoinEvaluation:
     def _build_lakeprompt_prompt(self, question: str, lakeprompt_context: str) -> str:
         """
         Build the evidence-grounded prompt for the LakePrompt condition.
+
+        This prompt is needed so the evaluation compares evidence-grounded
+        answering against the baseline condition.
 
         Args:
             question: Natural-language evaluation question.
@@ -433,6 +482,8 @@ class SpiderJoinEvaluation:
         """
         Write the structured evaluation payload to a JSON file.
 
+        This output is needed for later analysis and reproducibility.
+
         Args:
             payload: Evaluation results dictionary to persist.
         """
@@ -443,6 +494,8 @@ class SpiderJoinEvaluation:
     def _write_txt(self, payload: dict[str, Any]) -> None:
         """
         Write a human-readable evaluation report to a TXT file.
+
+        This output is needed for quick manual inspection of example runs.
 
         Args:
             payload: Evaluation results dictionary to render.
@@ -488,6 +541,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """
     Build the CLI parser for the evaluation runner.
 
+    This helper is needed so the evaluation workflow can be run from the
+    command line in a reproducible way.
+
     Returns:
         An `ArgumentParser` configured with evaluation options.
     """
@@ -528,7 +584,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    """Parse CLI arguments and run the evaluation workflow."""
+    """
+    Parse CLI arguments and run the evaluation workflow.
+
+    Returns:
+        None.
+    """
     args = build_arg_parser().parse_args()
     runner = SpiderJoinEvaluation(
         dataset_root=args.dataset_root,

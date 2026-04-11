@@ -11,7 +11,8 @@ import re
 
 import anthropic
 
-from .models import ColumnCard
+from .models import ColumnCard, QueryFilter, QueryOrder, QueryPlan, QuerySelect
+from .tracing import NULL_LOGGER, PipelineLogger
 
 
 _BARE_STRING_PATTERN = re.compile(r"^[A-Za-z0-9_./:-]+$")
@@ -21,6 +22,9 @@ DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 def _is_scalar(value: object) -> bool:
     """
     Return whether a value is a TOON-serializable scalar.
+
+    This helper is needed so the serializer can choose the right encoding
+    path before it emits prompt context.
 
     Args:
         value: Value to classify.
@@ -34,6 +38,9 @@ def _is_scalar(value: object) -> bool:
 def _format_scalar(value: object) -> str:
     """
     Format a scalar value using TOON-compatible literal syntax.
+
+    This function is needed because prompt serialization has to preserve
+    simple values compactly and consistently.
 
     Args:
         value: Scalar JSON-like value.
@@ -58,6 +65,9 @@ def _is_uniform_object_array(value: list[object]) -> bool:
     """
     Check whether a list qualifies for TOON tabular array encoding.
 
+    This is needed so arrays of row-like objects can be rendered in a
+    denser, easier-to-read tabular form.
+
     Args:
         value: Array candidate.
 
@@ -80,6 +90,9 @@ def _is_uniform_object_array(value: list[object]) -> bool:
 def _encode_array(name: str, value: list[object], indent: int) -> list[str]:
     """
     Encode a named array using TOON array syntax.
+
+    This helper exists so prompt payload arrays are serialized using the
+    most compact legal TOON representation.
 
     Args:
         name: Field name for the array.
@@ -116,6 +129,8 @@ def _encode_object(value: dict[str, object], indent: int) -> list[str]:
     """
     Encode an object using TOON indentation-based object syntax.
 
+    This helper is needed to recursively serialize nested prompt payloads.
+
     Args:
         value: Object to encode.
         indent: Current indentation level.
@@ -132,6 +147,9 @@ def _encode_object(value: dict[str, object], indent: int) -> list[str]:
 def _encode_named_value(name: str, value: object, indent: int) -> list[str]:
     """
     Encode a named JSON value into TOON lines.
+
+    This function is needed because TOON output decisions depend on the
+    runtime type of each field.
 
     Args:
         name: Field name.
@@ -165,7 +183,7 @@ def _encode_to_toon(value: dict[str, object]) -> str:
         value: Root object to encode.
 
     Returns:
-        A TOON document string.
+        A TOON document string suitable for inclusion in an LLM prompt.
     """
     return "\n".join(_encode_object(value, 0))
 
@@ -178,6 +196,9 @@ def _package_with_toon(
 ) -> str:
     """
     Build a prompt whose structured context is serialized as TOON.
+
+    This helper is needed so multiple callers can share one prompt layout
+    and one serialization format.
 
     Args:
         task: Short description of the model task.
@@ -208,6 +229,12 @@ def _build_anthropic_client() -> anthropic.Anthropic:
     """
     Build an Anthropic client from environment configuration.
 
+    This helper centralizes client creation so environment validation is
+    consistent across utility calls.
+
+    Returns:
+        An initialized Anthropic client.
+
     Raises:
         ValueError: If `ANTHROPIC_API_KEY` is not set.
     """
@@ -220,6 +247,15 @@ def _build_anthropic_client() -> anthropic.Anthropic:
 def _response_text(message: anthropic.types.Message) -> str:
     """
     Concatenate text blocks from an Anthropic Messages API response.
+
+    This helper is needed because Anthropic responses can be chunked into
+    multiple content blocks.
+
+    Args:
+        message: Anthropic message response object.
+
+    Returns:
+        A single concatenated text string.
     """
     return "".join(
         block.text for block in message.content if getattr(block, "type", None) == "text"
@@ -231,12 +267,15 @@ def generate_table_summaries(
     batch_size: int = 5,
     model: str = DEFAULT_CLAUDE_MODEL,
     cache_path: str = None,
+    logger: PipelineLogger | None = None,
 ) -> dict[str, str]:
     """
     Generate natural-language summaries for all tables in the lake.
 
     Sends tables to the LLM in batches to reduce API calls. Results are
     optionally cached to disk so summaries are not regenerated on every run.
+    Table summaries improve retrieval because column names alone are often
+    too sparse to capture what a table is about.
 
     Args:
         cards_by_table: Dictionary mapping table name to its ColumnCards.
@@ -247,6 +286,8 @@ def generate_table_summaries(
     Returns:
         Dictionary mapping table name to its generated summary string.
     """
+    logger = logger or NULL_LOGGER
+
     if cache_path and os.path.exists(cache_path):
         with open(cache_path, encoding="utf-8") as handle:
             summaries = json.load(handle)
@@ -279,6 +320,7 @@ def generate_table_summaries(
             payload=batch_payload,
             response_format='{"table_name_1":"summary","table_name_2":"summary"}',
         )
+        logger.log("llm_request", "Requesting table summaries.", {"prompt": prompt, "tables": batch})
 
         response = client.messages.create(
             model=model,
@@ -286,7 +328,9 @@ def generate_table_summaries(
             temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
-        summaries.update(json.loads(_response_text(response)))
+        raw = _response_text(response)
+        logger.log("llm_response", "Received table summaries.", {"response": raw, "tables": batch})
+        summaries.update(json.loads(raw))
 
     if cache_path:
         with open(cache_path, "w", encoding="utf-8") as handle:
@@ -295,20 +339,190 @@ def generate_table_summaries(
     return summaries
 
 
-def apply_llm_filters_to_sql(
+def _normalize_query_filter(item: object) -> QueryFilter | None:
+    """
+    Convert a JSON object into a QueryFilter if it is well-formed.
+
+    This helper is needed so LLM output is validated before it influences
+    SQL generation.
+
+    Args:
+        item: Candidate JSON-like object.
+
+    Returns:
+        A `QueryFilter` if the object is valid, otherwise `None`.
+    """
+    if not isinstance(item, dict):
+        return None
+
+    column = item.get("column")
+    operator = item.get("operator")
+    value = item.get("value")
+    table = item.get("table")
+
+    if not isinstance(column, str) or not column.strip():
+        return None
+    if not isinstance(operator, str) or not operator.strip():
+        return None
+    if table is not None and not isinstance(table, str):
+        table = None
+
+    return QueryFilter(
+        table=table,
+        column=column.strip(),
+        operator=operator.strip().upper(),
+        value=value,
+    )
+
+
+def _normalize_query_select(item: object) -> QuerySelect | None:
+    """
+    Convert a JSON object into a QuerySelect if it is well-formed.
+
+    Args:
+        item: Candidate JSON-like object.
+
+    Returns:
+        A `QuerySelect` if the object is valid, otherwise `None`.
+    """
+    if not isinstance(item, dict):
+        return None
+
+    column = item.get("column")
+    table = item.get("table")
+    aggregation = item.get("aggregation")
+
+    if not isinstance(column, str) or not column.strip():
+        return None
+    if table is not None and not isinstance(table, str):
+        table = None
+    if aggregation is not None and not isinstance(aggregation, str):
+        aggregation = None
+
+    return QuerySelect(
+        table=table,
+        column=column.strip(),
+        aggregation=aggregation.strip().upper() if isinstance(aggregation, str) and aggregation.strip() else None,
+    )
+
+
+def _normalize_query_order(item: object) -> QueryOrder | None:
+    """
+    Convert a JSON object into a QueryOrder if it is well-formed.
+
+    Args:
+        item: Candidate JSON-like object.
+
+    Returns:
+        A `QueryOrder` if the object is valid, otherwise `None`.
+    """
+    if not isinstance(item, dict):
+        return None
+
+    column = item.get("column")
+    direction = item.get("direction", "asc")
+    table = item.get("table")
+    aggregation = item.get("aggregation")
+
+    if not isinstance(column, str) or not column.strip():
+        return None
+    if not isinstance(direction, str) or not direction.strip():
+        direction = "asc"
+    if table is not None and not isinstance(table, str):
+        table = None
+    if aggregation is not None and not isinstance(aggregation, str):
+        aggregation = None
+
+    direction = direction.strip().lower()
+    if direction not in {"asc", "desc"}:
+        direction = "asc"
+
+    return QueryOrder(
+        table=table,
+        column=column.strip(),
+        direction=direction,
+        aggregation=aggregation.strip().upper() if isinstance(aggregation, str) and aggregation.strip() else None,
+    )
+
+
+def _parse_query_plan(raw: str) -> QueryPlan | None:
+    """
+    Parse an LLM JSON response into a structured QueryPlan.
+
+    This function is needed so free-form model output becomes a validated,
+    inspectable structure before SQL is touched.
+
+    Args:
+        raw: Raw text returned by the model.
+
+    Returns:
+        A parsed `QueryPlan`, or `None` if parsing fails.
+    """
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+    if not isinstance(parsed, dict):
+        return None
+
+    filters = [
+        normalized
+        for item in parsed.get("filters", [])
+        if (normalized := _normalize_query_filter(item)) is not None
+    ] if isinstance(parsed.get("filters", []), list) else []
+
+    projections = [
+        normalized
+        for item in parsed.get("projections", [])
+        if (normalized := _normalize_query_select(item)) is not None
+    ] if isinstance(parsed.get("projections", []), list) else []
+
+    having = [
+        normalized
+        for item in parsed.get("having", [])
+        if (normalized := _normalize_query_filter(item)) is not None
+    ] if isinstance(parsed.get("having", []), list) else []
+
+    order_by = [
+        normalized
+        for item in parsed.get("order_by", [])
+        if (normalized := _normalize_query_order(item)) is not None
+    ] if isinstance(parsed.get("order_by", []), list) else []
+
+    raw_group_by = parsed.get("group_by", [])
+    if isinstance(raw_group_by, list):
+        group_by = [item.strip() for item in raw_group_by if isinstance(item, str) and item.strip()]
+    else:
+        group_by = []
+
+    raw_limit = parsed.get("limit")
+    limit = raw_limit if isinstance(raw_limit, int) and raw_limit > 0 else None
+
+    return QueryPlan(
+        filters=filters,
+        projections=projections,
+        group_by=group_by,
+        having=having,
+        order_by=order_by,
+        limit=limit,
+    )
+
+
+def plan_llm_query(
     question: str,
     sql_query: str,
     involved_cards: list[ColumnCard],
     model: str = DEFAULT_CLAUDE_MODEL,
-) -> str:
+    logger: PipelineLogger | None = None,
+) -> QueryPlan:
     """
-    Ask an LLM to refine an existing SQL join query with filters and
-    aggregations when needed.
+    Ask an LLM to extract structured query intent for an existing SQL query.
 
-    The model is instructed to preserve the existing join structure and
-    may add filtering predicates, grouping, aggregations, HAVING clauses,
-    ordering, or limits implied by the user question and the columns
-    available in the involved tables.
+    The model must preserve the existing join structure conceptually and
+    return only the incremental filters, projections, grouping, ordering,
+    and limit implied by the question. This is needed so the model can
+    contribute semantic interpretation without taking control of join logic.
 
     Args:
         question: Original natural-language user question.
@@ -317,9 +531,10 @@ def apply_llm_filters_to_sql(
         model: Anthropic Claude model string.
 
     Returns:
-        The refined SQL query. If parsing fails, returns the original query.
+        A structured QueryPlan. If parsing fails, returns an empty plan.
     """
     client = _build_anthropic_client()
+    logger = logger or NULL_LOGGER
 
     payload = {
         "question": question,
@@ -329,6 +544,7 @@ def apply_llm_filters_to_sql(
                 "table": card.table_name,
                 "column": card.column_name,
                 "dtype": card.dtype,
+                "table_summary": card.table_summary,
                 "samples": card.sample_values[:3],
             }
             for card in involved_cards
@@ -336,13 +552,25 @@ def apply_llm_filters_to_sql(
     }
     prompt = _package_with_toon(
         task=(
-            "Refine the SQL to answer the question. You may add WHERE filters, "
-            "filter CTE predicates, aggregations, GROUP BY, HAVING, ORDER BY, "
-            "and LIMIT when needed. Do not change the joined tables, join keys, "
-            "or join order."
+            "Extract a structured query plan needed to refine the SQL so it "
+            "answers the question. Do not change the joined tables, join keys, "
+            "or join order. Return only incremental intent: filters, projected "
+            "columns, grouping, having, ordering, and limit."
         ),
         payload=payload,
-        response_format='{"refined_sql":"SELECT ..."}',
+        response_format=(
+            '{"filters":[{"table":"table_name","column":"column_name","operator":"=","value":"literal"}],'
+            '"projections":[{"table":"table_name","column":"column_name","aggregation":"SUM"}],'
+            '"group_by":["table.column"],'
+            '"having":[{"table":"table_name","column":"column_name","operator":">","value":1}],'
+            '"order_by":[{"table":"table_name","column":"column_name","direction":"desc","aggregation":"COUNT"}],'
+            '"limit":5}'
+        ),
+    )
+    logger.log(
+        "llm_request",
+        "Requesting structured query plan.",
+        {"prompt": prompt, "question": question, "sql_query": sql_query},
     )
 
     response = client.messages.create(
@@ -352,14 +580,47 @@ def apply_llm_filters_to_sql(
         messages=[{"role": "user", "content": prompt}],
     )
     raw = _response_text(response)
+    logger.log(
+        "llm_response",
+        "Received structured query plan response.",
+        {"response": raw, "question": question, "sql_query": sql_query},
+    )
 
-    try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        return sql_query
+    plan = _parse_query_plan(raw)
+    plan = plan if plan is not None else QueryPlan()
+    logger.log("query_plan", "Parsed query plan.", plan)
+    return plan
 
-    refined_sql = parsed.get("refined_sql")
-    if not isinstance(refined_sql, str) or not refined_sql.strip():
-        return sql_query
 
-    return refined_sql.strip()
+def apply_llm_filters_to_sql(
+    question: str,
+    sql_query: str,
+    involved_cards: list[ColumnCard],
+    model: str = DEFAULT_CLAUDE_MODEL,
+    logger: PipelineLogger | None = None,
+) -> str:
+    """
+    Backward-compatible wrapper that preserves the old function signature.
+
+    This now extracts a structured `QueryPlan` first and leaves SQL assembly
+    to the executor so filter intent is inspectable before execution.
+
+    Args:
+        question: Original natural-language user question.
+        sql_query: Existing SQL query to refine.
+        involved_cards: Column metadata for the query's tables.
+        model: Anthropic model name.
+
+    Returns:
+        A refined SQL query string.
+    """
+    from .executor import apply_query_plan_to_sql
+
+    plan = plan_llm_query(
+        question=question,
+        sql_query=sql_query,
+        involved_cards=involved_cards,
+        model=model,
+        logger=logger,
+    )
+    return apply_query_plan_to_sql(sql_query, plan)

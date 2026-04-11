@@ -4,6 +4,7 @@ from sentence_transformers import SentenceTransformer
 
 from .datalake import DataLake
 from .models import ColumnCard
+from .tracing import NULL_LOGGER, PipelineLogger
 
 
 class SemanticRetriever:
@@ -12,7 +13,10 @@ class SemanticRetriever:
 
     Uses SBERT to embed table summaries and hnswlib to build an HNSW
     index for fast approximate nearest neighbour search. At query time,
-    embeds the user question and returns the most relevant ColumnCards.
+    it embeds the user question and returns the most relevant
+    `ColumnCard` objects. This retriever is needed because join planning
+    is only tractable if the system first narrows attention to a small,
+    high-signal subset of tables and columns.
 
     It consumes ColumnCards produced by DataProfiler and its output -
     a ranked list of relevant cards — is consumed by
@@ -35,27 +39,30 @@ class SemanticRetriever:
         self,
         lake: DataLake,
         cards_by_table: dict[str, list[ColumnCard]],
-        model_name: str = "all-MiniLM-L6-v2"
+        model_name: str = "all-MiniLM-L6-v2",
+        logger: PipelineLogger | None = None,
     ):
         self.lake = lake
         self.cards_by_table = cards_by_table
         self.model = SentenceTransformer(model_name)
         self.index = None
         self._indexed_cards: list[ColumnCard] = []
+        self.logger = logger or NULL_LOGGER
 
     def _get_embedding_text(self, card: ColumnCard) -> str:
         """
         Build the text to embed for a given ColumnCard.
 
         Combines the table summary, column name, and sample values into
-        a single string. The table summary carries the most semantic
-        weight, while column name and samples provide specificity.
+        one string. This helper is needed because embeddings are more
+        useful when semantic context and concrete value hints are packed
+        together instead of embedding only a bare column name.
 
         Args:
             card: The ColumnCard to build embedding text for.
 
         Returns:
-            A single string representation of the card.
+            A single string representation of the card for embedding.
         """
         samples = ", ".join(str(v) for v in card.sample_values[:5])
         return (
@@ -70,7 +77,11 @@ class SemanticRetriever:
 
         Embeddings are written directly onto each card's embedding field.
         Runs all cards through SBERT in a single batch for efficiency.
-        Should be called before build_index().
+        This method is needed so later retrieval and ranking stages can
+        reuse precomputed vectors instead of re-encoding cards repeatedly.
+
+        Returns:
+            None. The method mutates cards and caches indexed cards.
         """
         all_cards = [
             card
@@ -90,8 +101,12 @@ class SemanticRetriever:
         Embed all cards and build an HNSW index over their embeddings.
 
         Calls embed_cards() internally so only build_index() needs to be
-        called from outside. The index is stored in self.index and used
-        by find_columns() at query time.
+        called from outside. The index is stored in `self.index` and used
+        by `find_columns()` at query time. Building the index once makes
+        semantic lookup fast enough for interactive use.
+
+        Returns:
+            None. The method stores the built HNSW index on the retriever.
 
         Raises:
             ValueError: If no cards are available to index.
@@ -123,15 +138,17 @@ class SemanticRetriever:
         Find the most semantically relevant ColumnCards for a question.
 
         Embeds the question using SBERT and queries the HNSW index for
-        the nearest neighbours. Builds the index automatically if it has
-        not been built yet.
+        the nearest neighbours. This method is needed because the rest of
+        the pipeline should reason over a ranked shortlist of likely
+        columns rather than every column in the lake.
 
         Args:
             question: The user's natural language question.
             top_k: Number of cards to return. Defaults to 10.
 
         Returns:
-            A list of the most relevant ColumnCards, ranked by relevance.
+            A list of the most relevant `ColumnCard` objects, ranked by
+            semantic relevance.
 
         Example:
         >>> cards = retriever.find_columns("How much did Denver customers spend?")
@@ -146,6 +163,19 @@ class SemanticRetriever:
         question_embedding = np.array(question_embedding, dtype=np.float32)
 
         k = min(top_k, len(self._indexed_cards))
-        labels, _ = self.index.knn_query(question_embedding, k=k)
-
-        return [self._indexed_cards[i] for i in labels[0]]
+        labels, distances = self.index.knn_query(question_embedding, k=k)
+        results = [self._indexed_cards[i] for i in labels[0]]
+        self.logger.log(
+            "semantic_columns",
+            "Retrieved semantically similar columns.",
+            [
+                {
+                    "table": card.table_name,
+                    "column": card.column_name,
+                    "table_summary": card.table_summary,
+                    "distance": float(distance),
+                }
+                for card, distance in zip(results, distances[0], strict=False)
+            ],
+        )
+        return results

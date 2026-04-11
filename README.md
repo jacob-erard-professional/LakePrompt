@@ -45,6 +45,19 @@ If you need to refresh `requirements.txt` from the active virtual environment:
 python -m pip freeze > requirements.txt
 ```
 
+### Supported data sources
+
+LakePrompt supports:
+
+- a local directory of CSV files via `LakePrompt(...)`
+- a supported remote source via `LakePrompt.from_url(...)`
+
+`LakePrompt.from_url(...)` currently supports:
+
+- direct `.csv` links
+- direct `.zip` links containing CSV files
+- GitHub repository URLs, where CSV files are discovered recursively after download
+
 ### Constructor interface
 
 ```python
@@ -62,6 +75,19 @@ Constructor arguments:
 - `lake_dir`: path to the directory containing CSV files
 - `model`: Anthropic model name used for summarization and answer generation
 - `cache_path`: optional JSON cache file for generated table summaries
+
+### Remote source interface
+
+```python
+from lakeprompt import LakePrompt
+
+lp = LakePrompt.from_url(
+    "https://github.com/your-org/your-data-repo",
+    cache_path="./table_summaries.json",
+)
+```
+
+The remote source is downloaded and normalized into a local cached CSV lake before the normal LakePrompt pipeline runs.
 
 ### Query interface
 
