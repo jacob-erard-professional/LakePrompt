@@ -196,7 +196,7 @@ class SpiderJoinEvaluation:
                 lakeprompt_error = None
 
                 try:
-                    from .lakeprompt import LakePrompt
+                    from ._lakeprompt import LakePrompt
 
                     lp = LakePrompt(
                         str(schema_dir),

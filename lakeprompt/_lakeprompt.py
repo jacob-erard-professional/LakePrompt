@@ -1,18 +1,20 @@
 import json
 import os
+from hashlib import sha256
+from pathlib import Path
 
 import anthropic
 
-from .datalake import DataLake
-from .ingest import DataLakePreparer
-from .LLM_utilities import DEFAULT_CLAUDE_MODEL, plan_llm_query
-from .models import LakeAnswer, QueryPlan
-from .profiler import LakeProfiler
-from .LLM_utilities import generate_table_summaries
-from .retrieval import SemanticRetriever
-from .executor import TupleExecutor
-from .packager import ContextPackager
-from .tracing import PipelineLogger
+from ._datalake import DataLake
+from ._ingest import _DataLakePreparer
+from ._llm_utilities import DEFAULT_CLAUDE_MODEL, plan_llm_query
+from ._models import LakeAnswer, QueryPlan
+from ._profiler import LakeProfiler
+from ._llm_utilities import generate_table_summaries
+from ._retrieval import SemanticRetriever
+from ._executor import TupleExecutor
+from ._packager import ContextPackager
+from ._tracing import PipelineLogger
 
 
 class LakePrompt:
@@ -44,15 +46,23 @@ class LakePrompt:
         lake_dir: str,
         model: str = DEFAULT_CLAUDE_MODEL,
         cache_path: str = None,
+        cache_dir: str | None = None,
+        save_artifacts: bool = True,
         logger: bool = False,
     ):
         self.logger = PipelineLogger(enabled=logger)
+        self.summary_cache_path = self._resolve_summary_cache_path(
+            lake_identifier=str(Path(lake_dir).expanduser().resolve()),
+            cache_path=cache_path,
+            cache_dir=cache_dir,
+            save_artifacts=save_artifacts,
+        )
 
         # 1. Load the lake
         self.lake = DataLake.load(lake_dir)
 
         # 2. Profile all tables → ColumnCards
-        self.profiler = LakeProfiler(self.lake, .8)
+        self.profiler = LakeProfiler(self.lake, 0.5)
         self.profiler.logger = self.logger
         self.cards_by_table = self.profiler.profile()
 
@@ -60,7 +70,7 @@ class LakePrompt:
         summaries = generate_table_summaries(
             cards_by_table=self.cards_by_table,
             model=model,
-            cache_path=cache_path,
+            cache_path=self.summary_cache_path,
             logger=self.logger,
         )
         for table_name, cards in self.cards_by_table.items():
@@ -84,6 +94,8 @@ class LakePrompt:
         source_url: str,
         model: str = DEFAULT_CLAUDE_MODEL,
         cache_path: str = None,
+        cache_dir: str | None = None,
+        save_artifacts: bool = True,
         source_cache_dir: str | None = None,
         logger: bool = False,
     ) -> "LakePrompt":
@@ -109,12 +121,14 @@ class LakePrompt:
             A fully initialized `LakePrompt` instance backed by the prepared
             local lake.
         """
-        preparer = DataLakePreparer(cache_root=source_cache_dir)
+        preparer = _DataLakePreparer(cache_root=source_cache_dir)
         prepared = preparer.prepare(source_url)
         instance = cls(
             lake_dir=str(prepared.prepared_dir),
             model=model,
             cache_path=cache_path,
+            cache_dir=cache_dir,
+            save_artifacts=save_artifacts,
             logger=logger,
         )
         instance.source_url = source_url
@@ -143,6 +157,12 @@ class LakePrompt:
         paths = self.profiler.get_join_paths(cards, query_plan=query_plan)
         tuples = self.executor.get_tuples(question, paths, query_plan=query_plan)
         context = self.packager.build_context(question, tuples, query_plan=query_plan)
+        if not context.evidence:
+            return LakeAnswer(
+                text="Could not find evidence in the data lake",
+                evidence=[],
+                cited_ids=[],
+            )
         answer_text, cited_ids = self._llm_complete(
             context.prompt,
             valid_ids={item.evidence_id for item in context.evidence},
@@ -241,3 +261,23 @@ class LakePrompt:
             )
         except Exception:
             return QueryPlan()
+
+    @staticmethod
+    def _resolve_summary_cache_path(
+        *,
+        lake_identifier: str,
+        cache_path: str | None,
+        cache_dir: str | None,
+        save_artifacts: bool,
+    ) -> str | None:
+        """
+        Compute the summary-cache path unless caching is explicitly disabled.
+        """
+        if not save_artifacts:
+            return None
+        if cache_path:
+            return cache_path
+
+        base_dir = Path(cache_dir or ".lakeprompt_cache").expanduser()
+        digest = sha256(lake_identifier.encode("utf-8")).hexdigest()[:16]
+        return str(base_dir / "table_summaries" / f"{digest}.json")

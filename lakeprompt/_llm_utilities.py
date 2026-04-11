@@ -8,15 +8,17 @@
 import json
 import os
 import re
+from pathlib import Path
 
 import anthropic
 
-from .models import ColumnCard, QueryFilter, QueryOrder, QueryPlan, QuerySelect
-from .tracing import NULL_LOGGER, PipelineLogger
+from ._models import ColumnCard, QueryFilter, QueryOrder, QueryPlan, QuerySelect
+from ._tracing import NULL_LOGGER, PipelineLogger
 
 
 _BARE_STRING_PATTERN = re.compile(r"^[A-Za-z0-9_./:-]+$")
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
+_FENCED_JSON_PATTERN = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
 
 
 def _is_scalar(value: object) -> bool:
@@ -262,6 +264,41 @@ def _response_text(message: anthropic.types.Message) -> str:
     ).strip()
 
 
+def _extract_json_text(raw: str) -> str:
+    """
+    Strip common markdown fencing around JSON responses.
+
+    Args:
+        raw: Raw model text.
+
+    Returns:
+        Plain JSON text when recoverable, otherwise the original string.
+    """
+    match = _FENCED_JSON_PATTERN.search(raw.strip())
+    if match:
+        return match.group(1).strip()
+    return raw.strip()
+
+
+def _fallback_table_summary(table_name: str, cards: list[ColumnCard]) -> str:
+    """
+    Build a deterministic local fallback summary for a table.
+    """
+    column_names = [card.column_name for card in cards[:5]]
+    sample_fragments = [
+        f"{card.column_name}={card.sample_values[0]}"
+        for card in cards
+        if card.sample_values
+    ][:3]
+
+    parts = [f"Table {table_name}"]
+    if column_names:
+        parts.append(f"with columns {', '.join(column_names)}")
+    if sample_fragments:
+        parts.append(f"and sample values such as {', '.join(sample_fragments)}")
+    return " ".join(parts) + "."
+
+
 def generate_table_summaries(
     cards_by_table: dict[str, list[ColumnCard]],
     batch_size: int = 5,
@@ -298,6 +335,8 @@ def generate_table_summaries(
         summaries = {}
         remaining = cards_by_table
 
+    cache_file = Path(cache_path) if cache_path else None
+
     client = _build_anthropic_client()
 
     table_names = list(remaining.keys())
@@ -330,11 +369,31 @@ def generate_table_summaries(
         )
         raw = _response_text(response)
         logger.log("llm_response", "Received table summaries.", {"response": raw, "tables": batch})
-        summaries.update(json.loads(raw))
+        try:
+            parsed = json.loads(_extract_json_text(raw))
+        except json.JSONDecodeError:
+            parsed = {}
 
-    if cache_path:
-        with open(cache_path, "w", encoding="utf-8") as handle:
-            json.dump(summaries, handle, indent=2)
+        if not isinstance(parsed, dict):
+            parsed = {}
+
+        for table_name in batch:
+            summary = parsed.get(table_name)
+            if isinstance(summary, str) and summary.strip():
+                summaries[table_name] = summary.strip()
+            else:
+                fallback = _fallback_table_summary(table_name, remaining[table_name])
+                summaries[table_name] = fallback
+                logger.log(
+                    "summary_fallback",
+                    "Used fallback table summary.",
+                    {"table": table_name, "summary": fallback},
+                )
+
+        if cache_file is not None:
+            cache_file.parent.mkdir(parents=True, exist_ok=True)
+            with cache_file.open("w", encoding="utf-8") as handle:
+                json.dump(summaries, handle, indent=2)
 
     return summaries
 
@@ -459,7 +518,7 @@ def _parse_query_plan(raw: str) -> QueryPlan | None:
         A parsed `QueryPlan`, or `None` if parsing fails.
     """
     try:
-        parsed = json.loads(raw)
+        parsed = json.loads(_extract_json_text(raw))
     except json.JSONDecodeError:
         return None
 
@@ -614,7 +673,7 @@ def apply_llm_filters_to_sql(
     Returns:
         A refined SQL query string.
     """
-    from .executor import apply_query_plan_to_sql
+    from ._executor import apply_query_plan_to_sql
 
     plan = plan_llm_query(
         question=question,

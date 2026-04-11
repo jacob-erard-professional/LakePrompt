@@ -1,9 +1,9 @@
 from dataclasses import asdict
 
-from .datalake import DataLake
-from .models import JoinedTuple, LakeContext, QueryPlan
-from .LLM_utilities import _package_with_toon
-from .tracing import NULL_LOGGER, PipelineLogger
+from ._datalake import DataLake
+from ._models import JoinedTuple, LakeContext, QueryPlan
+from ._llm_utilities import _package_with_toon
+from ._tracing import NULL_LOGGER, PipelineLogger
 
 
 class ContextPackager:

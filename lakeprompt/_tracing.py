@@ -21,8 +21,23 @@ class PipelineLogger:
             return
 
         print(f"[LakePrompt:{section}] {message}")
+        if section in {"sql_query", "sql_refinement"}:
+            sql = self._extract_sql(payload)
+            if sql:
+                print("SQL:")
+                print(sql)
         if payload is not None:
             print(self._format_payload(payload))
+
+    def _extract_sql(self, payload: Any) -> str | None:
+        """
+        Pull the executed SQL string out of a structured payload when present.
+        """
+        if isinstance(payload, dict):
+            sql = payload.get("sql")
+            if isinstance(sql, str):
+                return sql
+        return None
 
     def _format_payload(self, payload: Any) -> str:
         """

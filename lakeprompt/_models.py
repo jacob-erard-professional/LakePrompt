@@ -230,6 +230,14 @@ class ColumnCard:
         summary: Auto-generated or LLM-generated description of the column.
         table_summary: LLM-generated description of the whole table.
             Shared across all ColumnCards belonging to the same table.
+        uniqueness_ratio: Fraction of non-null sampled values that are unique.
+        null_ratio: Fraction of sampled values that are null.
+        sequentiality_ratio: Fraction of adjacent sorted numeric deltas equal
+            to 1.0 when the column looks numeric.
+        surrogate_key_score: Heuristic score that the column behaves like a
+            generated row identifier.
+        foreign_key_score: Heuristic score that the column behaves like a
+            reference into another table.
         jaccard_matches: Mapping from (table_name, column_name) to
             Jaccard similarity for columns above the profiler threshold.
         embedding: Vector embedding of the summary, filled by
@@ -241,5 +249,10 @@ class ColumnCard:
     sample_values: list[Any] = field(default_factory=list)
     summary: str = ""
     table_summary: str = ""
+    uniqueness_ratio: float = 0.0
+    null_ratio: float = 0.0
+    sequentiality_ratio: float = 0.0
+    surrogate_key_score: float = 0.0
+    foreign_key_score: float = 0.0
     jaccard_matches: dict[tuple[str, str], float] = field(default_factory=dict)
     embedding: list[float] | None = None

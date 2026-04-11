@@ -2,9 +2,9 @@ import numpy as np
 import hnswlib
 from sentence_transformers import SentenceTransformer
 
-from .datalake import DataLake
-from .models import ColumnCard
-from .tracing import NULL_LOGGER, PipelineLogger
+from ._datalake import DataLake
+from ._models import ColumnCard
+from ._tracing import NULL_LOGGER, PipelineLogger
 
 
 class SemanticRetriever:
@@ -40,6 +40,7 @@ class SemanticRetriever:
         lake: DataLake,
         cards_by_table: dict[str, list[ColumnCard]],
         model_name: str = "all-MiniLM-L6-v2",
+        score_window: float = 0.08,
         logger: PipelineLogger | None = None,
     ):
         self.lake = lake
@@ -47,6 +48,7 @@ class SemanticRetriever:
         self.model = SentenceTransformer(model_name)
         self.index = None
         self._indexed_cards: list[ColumnCard] = []
+        self.score_window = score_window
         self.logger = logger or NULL_LOGGER
 
     def _get_embedding_text(self, card: ColumnCard) -> str:
@@ -164,7 +166,8 @@ class SemanticRetriever:
 
         k = min(top_k, len(self._indexed_cards))
         labels, distances = self.index.knn_query(question_embedding, k=k)
-        results = [self._indexed_cards[i] for i in labels[0]]
+        filtered = self._filter_ranked_results(labels[0], distances[0])
+        results = [self._indexed_cards[i] for i, _ in filtered]
         self.logger.log(
             "semantic_columns",
             "Retrieved semantically similar columns.",
@@ -175,7 +178,31 @@ class SemanticRetriever:
                     "table_summary": card.table_summary,
                     "distance": float(distance),
                 }
-                for card, distance in zip(results, distances[0], strict=False)
+                for card, (_, distance) in zip(results, filtered, strict=False)
             ],
         )
         return results
+
+    def _filter_ranked_results(
+        self,
+        labels,
+        distances,
+    ) -> list[tuple[int, float]]:
+        """
+        Keep only results whose scores remain close to the best match.
+
+        HNSW returns the nearest `top_k` neighbors even when tail matches are
+        weak. This helper trims that tail by retaining near-ties within a fixed
+        distance window of the best score while always keeping at least one
+        result.
+        """
+        ranked = [
+            (int(label), float(distance))
+            for label, distance in zip(labels, distances, strict=False)
+        ]
+        if not ranked:
+            return []
+
+        cutoff = ranked[0][1] + self.score_window
+        filtered = [item for item in ranked if item[1] <= cutoff]
+        return filtered or ranked[:1]

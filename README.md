@@ -1,36 +1,105 @@
 # LakePrompt
-LakePrompt research project for CS4964.
 
-## Overview
+LakePrompt is a Python research prototype for answering natural-language questions over a data lake of CSV files. It profiles columns, retrieves semantically relevant columns, plans joins, executes SQL over Polars, packages evidence for an LLM, and returns a grounded answer with supporting evidence.
 
-LakePrompt is a prototype for answering natural-language questions over a folder of CSV files. It loads the tables, profiles columns, retrieves relevant columns semantically, finds join paths, executes queries, packages evidence for an LLM, and returns an answer with supporting evidence.
+The repository currently contains the core LakePrompt package plus documentation for the class project proposal and progress.
 
-## User Interface
+## Current State
 
-The main user-facing interface is `LakePrompt`. A user provides a directory of CSV files, asks a natural-language question, and receives a `LakeAnswer` containing answer text, supporting evidence rows, and cited evidence IDs.
+The pipeline currently supports:
 
-### What the user provides
+- recursive CSV discovery from nested directories
+- stable table naming for nested paths such as `region/sales/customers.csv -> region__sales__customers`
+- remote data-lake preparation from:
+  - direct `.csv` URLs
+  - `.zip` archives
+  - GitHub repository URLs
+- cached table summaries and prepared remote sources under `.lakeprompt_cache/` by default
+- semantic column retrieval with `sentence-transformers` and `hnswlib`
+- score-window filtering of semantic retrieval results so weak tail matches are dropped
+- LLM extraction of a structured `QueryPlan` with:
+  - filters
+  - projections
+  - group-by
+  - having
+  - order-by
+  - limit
+- join-path discovery with:
+  - Jaccard overlap
+  - schema heuristics
+  - namespace-aware pruning for Spider-style multi-database lakes
+  - plan-aware path validation
+  - single-table short-circuiting when no join is required
+- profile-based key heuristics on columns:
+  - uniqueness
+  - null ratio
+  - sequentiality
+  - surrogate-key score
+  - foreign-key score
+- deterministic SQL generation from `QueryPlan`
+- typed filter coercion before SQL execution
+- row-level evidence ranking and diversity filtering
+- prompt-time projection of rows down to plan-relevant columns
+- optional stdout tracing for:
+  - semantic retrieval
+  - Jaccard matches
+  - LLM prompts and responses
+  - join paths
+  - refined SQL
+  - executed SQL
+  - ranked evidence rows
+- local fallback behavior when no evidence is found, without calling the final LLM
 
-LakePrompt expects a directory containing one or more CSV files:
+## Repository Layout
 
-```text
-data/
-  customers.csv
-  orders.csv
-  products.csv
+Top-level visible files and folders:
+
+- `README.md`
+- `requirements.txt`
+- `Documents/`
+- `lakeprompt/`
+
+Key documents:
+
+- `Documents/Final Project Proposal.md`: original proposal
+- `Documents/Progress.MD`: running implementation/progress notes
+
+Key package modules:
+
+- `lakeprompt/__init__.py`: package exports
+- `lakeprompt/_datalake.py`: internal CSV loading and Polars SQL execution
+- `lakeprompt/_ingest.py`: internal remote-source preparation and caching used by `LakePrompt.from_url(...)`
+- `lakeprompt/_profiler.py`: internal column profiling, join discovery, and join-path ranking
+- `lakeprompt/_retrieval.py`: internal semantic retrieval over `ColumnCard`s
+- `lakeprompt/_executor.py`: internal SQL generation, execution, and tuple scoring
+- `lakeprompt/_packager.py`: internal evidence packaging into TOON prompts
+- `lakeprompt/_llm_utilities.py`: internal Anthropic-backed table summaries and query planning
+- `lakeprompt/_lakeprompt.py`: internal implementation module for the public `LakePrompt` class
+- `lakeprompt/_models.py`: internal shared dataclasses such as `LakeAnswer`, `JoinPath`, `QueryPlan`, and `ColumnCard`
+- `lakeprompt/_tracing.py`: internal stdout tracing logger
+- `lakeprompt/evaluation.py`: evaluation runner
+
+## Public API
+
+```python
+from lakeprompt import LakePrompt
 ```
 
-Each file becomes a table internally, using the filename without the `.csv` extension as the table name.
+Main entry points:
 
-### Required setup
+- `LakePrompt(...)`: initialize from a local CSV directory
+- `LakePrompt.from_url(...)`: initialize from a supported remote source
+- `LakePrompt.query(question)`: run the full retrieval/planning/execution pipeline
 
-LakePrompt calls Anthropic during table summarization and final answer generation, so the environment must include:
+`LakePrompt.query(...)` returns an answer object with:
 
-```bash
-export ANTHROPIC_API_KEY="your_api_key_here"
-```
+- `text`
+- `evidence`
+- `cited_ids`
 
-Create and activate a local virtual environment, then install dependencies:
+## Setup
+
+Create and activate a virtual environment, then install dependencies:
 
 ```bash
 python3 -m venv .venv
@@ -39,26 +108,21 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-If you need to refresh `requirements.txt` from the active virtual environment:
+Set your Anthropic key for table summarization, query planning, evaluation helpers, and final answering:
 
 ```bash
-python -m pip freeze > requirements.txt
+export ANTHROPIC_API_KEY="your_api_key_here"
 ```
 
-### Supported data sources
+Optional but useful for faster Hugging Face downloads:
 
-LakePrompt supports:
+```bash
+export HF_TOKEN="your_hf_token_here"
+```
 
-- a local directory of CSV files via `LakePrompt(...)`
-- a supported remote source via `LakePrompt.from_url(...)`
+## Usage
 
-`LakePrompt.from_url(...)` currently supports:
-
-- direct `.csv` links
-- direct `.zip` links containing CSV files
-- GitHub repository URLs, where CSV files are discovered recursively after download
-
-### Constructor interface
+### Local lake
 
 ```python
 from lakeprompt import LakePrompt
@@ -66,104 +130,100 @@ from lakeprompt import LakePrompt
 lp = LakePrompt(
     lake_dir="./data",
     model="claude-sonnet-4-20250514",
-    cache_path="./table_summaries.json",
+    logger=True,
 )
+
+answer = lp.query("Which customers spent the most in January?")
+print(answer.text)
+print(answer.cited_ids)
+print(answer.evidence)
 ```
 
-Constructor arguments:
-
-- `lake_dir`: path to the directory containing CSV files
-- `model`: Anthropic model name used for summarization and answer generation
-- `cache_path`: optional JSON cache file for generated table summaries
-
-### Remote source interface
+### Remote source
 
 ```python
 from lakeprompt import LakePrompt
 
 lp = LakePrompt.from_url(
     "https://github.com/your-org/your-data-repo",
-    cache_path="./table_summaries.json",
+    model="claude-sonnet-4-20250514",
+    logger=True,
 )
 ```
 
-The remote source is downloaded and normalized into a local cached CSV lake before the normal LakePrompt pipeline runs.
+Supported remote sources:
 
-### Query interface
+- direct `.csv` URLs
+- direct `.zip` URLs containing CSV files
+- GitHub repository URLs, including `.../tree/<branch>` links
 
-Once initialized, the user interacts with the library through `query(...)`:
+Remote-source preparation is intentionally kept behind `LakePrompt.from_url(...)`. Users do not need to instantiate ingestion helpers directly.
+Internal package modules now use underscore-prefixed names to signal that they are not part of the supported public API.
 
-```python
-from lakeprompt import LakePrompt
+### Caching behavior
 
-lp = LakePrompt("./data", cache_path="./table_summaries.json")
-answer = lp.query("Which customers spent the most in January?")
-```
+- `save_artifacts=True` by default
+- if `cache_path` is not supplied, table summaries are written under `.lakeprompt_cache/table_summaries/`
+- prepared remote sources are cached under `.lakeprompt_cache/` unless `source_cache_dir` is provided
+- summary cache files are written incrementally, so interrupted runs do not lose all progress
 
-This runs the full pipeline:
+### Logger behavior
 
-- load the CSV lake
-- profile columns
-- generate table summaries
-- retrieve relevant columns
-- infer join paths
-- execute candidate joins
-- package evidence for the prompt
-- ask the LLM for the final response
+Passing `logger=True` enables stdout tracing. Current trace output includes:
 
-### Return value
+- profiled column cards
+- discovered Jaccard/schema join matches
+- semantically retrieved columns
+- LLM prompts and responses
+- parsed `QueryPlan`
+- ranked join paths
+- refined SQL as plain text
+- executed SQL as plain text
+- ranked evidence rows
+- final prompt context metadata
 
-`query(...)` returns a `LakeAnswer` object:
+## Behavior Notes
 
-```python
-print(answer.text)
-print(answer.cited_ids)
-print(answer.evidence)
-```
+- if no evidence is found, `query(...)` returns `"Could not find evidence in the data lake"` and does not call the final LLM
+- join execution is limited to the top-ranked candidate paths rather than exhaustively running every path
+- Spider-style multi-database lakes are constrained by namespace-aware join planning to reduce false cross-database joins
+- join heuristics now use profile-based key signals, not only literal `id` naming
 
-Its fields are:
+## Changes Made By Codex
 
-- `answer.text`: the natural-language answer returned by the model
-- `answer.cited_ids`: evidence IDs cited by the model response
-- `answer.evidence`: a list of evidence rows used to support that answer
+The following major repository changes were implemented in this working branch:
 
-### Minimal end-to-end example
+- added remote ingestion support for CSV, ZIP, and GitHub sources
+- added recursive CSV discovery so nested files are loaded automatically
+- added default-on artifact caching and incremental summary-cache writes
+- introduced structured `QueryPlan` planning instead of opaque LLM SQL rewrites
+- reused `QueryPlan` across join planning, execution, and prompt packaging
+- added prompt-time projection to only include plan-relevant evidence columns
+- added stdout pipeline tracing with detailed SQL, LLM, retrieval, and join logs
+- added Spider-based join-metric tests and expanded join workflow coverage
+- hardened LLM parsing for fenced JSON and partial table-summary outputs
+- quoted SQL identifiers safely for Polars execution
+- improved join planning with:
+  - namespace-aware pruning
+  - path validation against query-plan-required tables
+  - same-namespace schema heuristics
+  - profile-based surrogate/foreign-key scoring
+- improved executor behavior with:
+  - typed filter coercion
+  - aggregate aliasing for grouped SQL
+  - capped path execution
+  - local no-evidence fallback
+- updated the docs and progress notes to match the current implementation
 
-```python
-from lakeprompt import LakePrompt
+## Constraints
 
-lp = LakePrompt("./data", cache_path="./table_summaries.json")
-answer = lp.query("What are the top 3 products by total sales?")
-
-print("Answer:")
-print(answer.text)
-
-print("\nCitations:")
-print(answer.cited_ids)
-
-print("\nEvidence:")
-for row in answer.evidence[:3]:
-    print(row.evidence_id, row.data)
-```
-
-### Typical usage flow
-
-1. Place related CSV files in one directory.
-2. Initialize `LakePrompt` with that directory.
-3. Call `query(...)` with a natural-language question.
-4. Read `answer.text` for the response, `answer.cited_ids` for cited evidence, and `answer.evidence` for supporting tuples.
+- Anthropic is required for several pipeline stages
+- embeddings use `sentence-transformers`
+- nearest-neighbor retrieval uses `hnswlib`
+- the pinned dependency set is relatively heavy
+- benchmark data is not committed in the visible repository
 
 ## Acknowledgments
-
-This project builds on several external datasets, specifications, and open-source libraries.
-
-- Spider Join Data: evaluation planning in this repo uses the `superctj/spider-join-data` repository, which is derived from the broader Spider text-to-SQL benchmark ecosystem.
-- Spider dataset: please credit the original Spider dataset authors when using Spider-derived data:
-  Tao Yu, Rui Zhang, Kai Yang, Michihiro Yasunaga, Dongxu Wang, Zifan Li, James Ma, Irene Li, Qingning Yao, Shanelle Roman, Zilin Zhang, and Dragomir Radev. 2018. *Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task*. Proceedings of EMNLP 2018. DOI: `10.18653/v1/D18-1425`.
-- TOON: prompt serialization work in this repo is based on Token-Oriented Object Notation (TOON), using the public `toon-format` specification and reference implementation ecosystem. Credit to the TOON project and Johann Schopplich.
-- Open-source software: this project also relies on the maintainers and contributors behind `polars`, `numpy`, `hnswlib`, `sentence-transformers`, and the `anthropic` Python SDK.
-
-References:
 
 - Spider Join Data: https://github.com/superctj/spider-join-data
 - Spider paper: https://aclanthology.org/D18-1425/

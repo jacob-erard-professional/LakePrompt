@@ -3,10 +3,11 @@ logger = logging.getLogger(__name__)
 
 from collections import defaultdict
 from dataclasses import dataclass
-from .datalake import DataLake
-from .models import JoinPath, JoinedTuple, JoinProvenance, QueryFilter, QueryOrder, QueryPlan, QuerySelect
-from .LLM_utilities import plan_llm_query
-from .tracing import NULL_LOGGER, PipelineLogger
+from dataclasses import replace
+from ._datalake import DataLake
+from ._models import JoinPath, JoinedTuple, JoinProvenance, QueryFilter, QueryOrder, QueryPlan, QuerySelect
+from ._llm_utilities import plan_llm_query
+from ._tracing import NULL_LOGGER, PipelineLogger
 
 """
 TupleExecutor — Stream S3 of the LakePrompt pipeline.
@@ -19,9 +20,18 @@ evidence objects for the packager.
 
 
 DEFAULT_TOP_R = 20
+DEFAULT_MAX_PATHS_TO_EXECUTE = 3
 
 # model cache so SentenceTransformer is only loaded once per process.
 _ST_MODEL: object = None
+
+
+def _quote_identifier(identifier: str) -> str:
+    """
+    Quote a SQL identifier for Polars SQL.
+    """
+    escaped = identifier.replace('"', '""')
+    return f'"{escaped}"'
 
 
 def _quote_sql_value(value: object) -> str:
@@ -62,10 +72,11 @@ def _qualified_column(column: str, table: str | None = None) -> str:
         A SQL-ready column reference.
     """
     if "." in column:
-        return column
+        left, right = column.split(".", 1)
+        return f'{_quote_identifier(left)}.{_quote_identifier(right)}'
     if table:
-        return f"{table}.{column}"
-    return column
+        return f"{_quote_identifier(table)}.{_quote_identifier(column)}"
+    return _quote_identifier(column)
 
 
 def _filter_to_sql(filter_: QueryFilter) -> str:
@@ -115,6 +126,16 @@ def _select_to_sql(select: QuerySelect) -> str:
     return column_sql
 
 
+def _select_alias(select: QuerySelect, index: int) -> str:
+    """
+    Return a stable output alias for a projection.
+    """
+    if select.aggregation:
+        table = select.table or "value"
+        return f"agg_{index}__{select.aggregation.lower()}__{table}__{select.column}"
+    return select.column
+
+
 def _order_to_sql(order: QueryOrder) -> str:
     """
     Convert a structured ordering directive into SQL.
@@ -162,8 +183,14 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
     from_clause = sql[from_idx:].strip()
 
     select_clause = base_select
+    projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
     if plan.projections:
-        projection_sql = ", ".join(_select_to_sql(item) for item in plan.projections)
+        projection_parts: list[str] = []
+        for idx, item in enumerate(plan.projections):
+            alias = _select_alias(item, idx)
+            projection_aliases[(item.table, item.column, item.aggregation)] = alias
+            projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
+        projection_sql = ", ".join(projection_parts)
         select_clause = f"SELECT {projection_sql}"
 
     parts = [select_clause, from_clause]
@@ -182,12 +209,41 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
         parts.append("HAVING " + " AND ".join(_filter_to_sql(item) for item in plan.having))
 
     if plan.order_by:
-        parts.append("ORDER BY " + ", ".join(_order_to_sql(item) for item in plan.order_by))
+        order_parts: list[str] = []
+        for item in plan.order_by:
+            alias = projection_aliases.get((item.table, item.column, item.aggregation))
+            if alias:
+                order_parts.append(f"{_quote_identifier(alias)} {item.direction.upper()}")
+            else:
+                order_parts.append(_order_to_sql(item))
+        parts.append("ORDER BY " + ", ".join(order_parts))
 
     if plan.limit is not None:
         parts.append(f"LIMIT {plan.limit}")
 
     return "\n".join(parts)
+
+
+def _query_plan_tables(plan: QueryPlan | None) -> set[str]:
+    """
+    Return all tables explicitly required by a structured query plan.
+    """
+    if plan is None:
+        return set()
+    tables: set[str] = set()
+    for filter_ in plan.filters + plan.having:
+        if filter_.table:
+            tables.add(filter_.table)
+    for projection in plan.projections:
+        if projection.table:
+            tables.add(projection.table)
+    for order in plan.order_by:
+        if order.table:
+            tables.add(order.table)
+    for item in plan.group_by:
+        if "." in item:
+            tables.add(item.split(".", 1)[0])
+    return tables
 
 
 @dataclass
@@ -214,6 +270,7 @@ class TupleExecutor:
         paths: list[JoinPath],
         query_plan: QueryPlan | None = None,
         top_r: int = DEFAULT_TOP_R,
+        max_paths_to_execute: int = DEFAULT_MAX_PATHS_TO_EXECUTE,
     ) -> list[JoinedTuple]:
         """
         Execute join paths and return the top-r most relevant evidence tuples.
@@ -231,7 +288,7 @@ class TupleExecutor:
         q_emb = self._embed_question(question)
         all_scored: list[tuple[float, dict, JoinPath]] = []
 
-        for path in paths:
+        for path in paths[:max_paths_to_execute]:
             rows = self._execute_path(path, question=question, query_plan=query_plan)
             if not rows:
                 continue
@@ -293,15 +350,21 @@ class TupleExecutor:
         select_parts: list[str] = []
         for tbl, col, alias in col_aliases:
             if alias != col:
-                select_parts.append(f"{tbl}.{col} AS {alias}")
+                select_parts.append(
+                    f"{_quote_identifier(tbl)}.{_quote_identifier(col)} AS {_quote_identifier(alias)}"
+                )
             else:
-                select_parts.append(f"{tbl}.{col}")
+                select_parts.append(f"{_quote_identifier(tbl)}.{_quote_identifier(col)}")
 
         # Start with the first (leftmost) table, then chain joins.
-        sql = f"SELECT {', '.join(select_parts)}\nFROM {tables[0]}"
+        sql = f"SELECT {', '.join(select_parts)}\nFROM {_quote_identifier(tables[0])}"
 
         for t1, col1, t2, col2 in join_keys:
-            sql += f"\nJOIN {t2} ON {t1}.{col1} = {t2}.{col2}"
+            sql += (
+                f"\nJOIN {_quote_identifier(t2)} "
+                f"ON {_quote_identifier(t1)}.{_quote_identifier(col1)} = "
+                f"{_quote_identifier(t2)}.{_quote_identifier(col2)}"
+            )
 
         if filter_clause:
             sql += f"\nWHERE {filter_clause}"
@@ -367,9 +430,19 @@ class TupleExecutor:
         Returns:
             A possibly empty list of row dictionaries.
         """
+        if query_plan is not None:
+            required_tables = _query_plan_tables(query_plan)
+            if required_tables and not required_tables.issubset(set(path.tables)):
+                logger.warning(
+                    "Skipping path %s because it does not cover required query-plan tables %s.",
+                    path.tables,
+                    sorted(required_tables),
+                )
+                return []
+
         if len(path.tables) == 1:
             where = f" WHERE {filter_clause}" if filter_clause else ""
-            sql = f"SELECT * FROM {path.tables[0]}{where}"
+            sql = f"SELECT * FROM {_quote_identifier(path.tables[0])}{where}"
         else:
             try:
                 sql = self._build_join_sql(path, filter_clause)
@@ -428,6 +501,7 @@ class TupleExecutor:
 
         try:
             plan = query_plan if query_plan is not None else plan_llm_query(question, sql, involved_cards)
+            plan = self._coerce_query_plan_types(plan, involved_cards)
             refined_sql = apply_query_plan_to_sql(sql, plan)
             self.logger.log(
                 "sql_refinement",
@@ -440,6 +514,58 @@ class TupleExecutor:
                 "Filter extraction failed for path %s: %s", path.tables, exc
             )
             return sql
+
+    def _coerce_query_plan_types(
+        self,
+        plan: QueryPlan,
+        involved_cards,
+    ) -> QueryPlan:
+        """
+        Coerce filter literals to the dtypes of the referenced columns when
+        those dtypes are known from the profiled cards.
+        """
+        dtype_map = {
+            (card.table_name, card.column_name): card.dtype.lower()
+            for card in involved_cards
+        }
+        filters = [self._coerce_filter_value(item, dtype_map) for item in plan.filters]
+        having = [self._coerce_filter_value(item, dtype_map) for item in plan.having]
+        return replace(plan, filters=filters, having=having)
+
+    def _coerce_filter_value(
+        self,
+        filter_: QueryFilter,
+        dtype_map: dict[tuple[str, str], str],
+    ) -> QueryFilter:
+        """
+        Convert string filter literals into numeric/bool values when the
+        target column dtype indicates they should be typed.
+        """
+        dtype = dtype_map.get((filter_.table, filter_.column))
+        if dtype is None:
+            return filter_
+        return replace(filter_, value=self._coerce_value_to_dtype(filter_.value, dtype))
+
+    def _coerce_value_to_dtype(self, value, dtype: str):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return [self._coerce_value_to_dtype(item, dtype) for item in value]
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        try:
+            if "int" in dtype:
+                return int(normalized)
+            if "float" in dtype or "double" in dtype:
+                return float(normalized)
+            if "bool" in dtype:
+                lowered = normalized.lower()
+                if lowered in {"true", "false"}:
+                    return lowered == "true"
+        except ValueError:
+            return value
+        return value
 
     def _embed_question(self, question: str) -> "np.ndarray | None":  # type: ignore[name-defined]
         """

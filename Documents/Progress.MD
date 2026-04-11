@@ -1,147 +1,19 @@
 # LakePrompt Progress
 
-This document summarizes project status based only on code and files currently present in the git repository.
+This document summarizes project status from the public repository surface only: files currently visible in the repo, excluding anything covered by `.gitignore`.
 
-## What's Been Done
+## Current Public Surface
 
-### Core data-lake pipeline
+A public user currently sees:
 
-The git repo contains a working pipeline structure across these modules:
-
-- `lakeprompt/datalake.py`
-- `lakeprompt/profiler.py`
-- `lakeprompt/retrieval.py`
-- `lakeprompt/executor.py`
-- `lakeprompt/packager.py`
-- `lakeprompt/lakeprompt.py`
-- `lakeprompt/models.py`
-
-Implemented pieces in the repo:
-
-- CSV loading through a `DataLake` abstraction using Polars SQL
-- column profiling with sample values and Jaccard-based joinability detection
-- a join graph stored on the lake
-- semantic column retrieval using SentenceTransformers and HNSW
-- join-path generation in the profiler
-- join execution and row-level scoring in the executor
-- diversity filtering for evidence rows
-- TOON-based prompt packaging
-- final answer generation through Anthropic
-- returned evidence rows in `LakeAnswer`
-- preserved `cited_ids` in `LakeAnswer`
-
-### Models and public API
-
-The repo already exposes:
-
-- `LakePrompt` as the main entry point
-- `LakeAnswer` as the return type
-- structured evidence objects with provenance metadata
-
-### Evaluation scaffold
-
-The repo includes an evaluation runner in `lakeprompt/evaluation.py` that can:
-
-- load Spider join metadata
-- generate questions with Claude
-- run a baseline prompt
-- run LakePrompt on the same schemas
-- write JSON and TXT outputs
-
-### Tests currently present
-
-The repo includes `tests/test_join_workflow.py`, which covers:
-
-- three-table join-path discovery
-- row-level tuple scoring
-- provenance preservation
-- provenance packaging into prompt context
-
-## What's Partially Done
-
-### Join-path workflow alignment
-
-The repo contains join discovery, tuple scoring, and provenance support, but `Documents/Final Project Proposal.md` and the current code are not yet fully aligned on the full intended join-path workflow. This is the area currently being finished.
-
-### Cited answers
-
-The prompt format asks the LLM for `cited_ids`, and the public result now preserves them, but there is not yet a validation layer that checks whether the citations genuinely support the answer.
-
-### Evaluation
-
-The repo has an evaluation runner, but it is still a scaffold rather than a full benchmark-and-metrics system.
-
-## What's Left To Do
-
-### 1. Fixed benchmark data
-
-Still missing:
-
-- a stable benchmark dataset in the repo
-- labeled question difficulty categories
-- stored ground-truth answers
-- stored ground-truth SQL or gold evidence
-
-### 2. Real scoring metrics
-
-Still missing:
-
-- exact match scoring
-- F1 scoring
-- numeric tolerance scoring
-- execution accuracy scoring
-- aggregate metric summaries
-
-### 3. Proposal baselines
-
-Still missing:
-
-- no-context baseline
-- single-table retrieval baseline
-- naive multi-table concatenation baseline
-- join-without-ranking baseline
-
-### 4. Faithfulness checks
-
-Still missing:
-
-- answer-to-evidence validation
-- unsupported-claim detection
-- citation validation against evidence rows
-
-### 5. Ablation support
-
-Still missing:
-
-- experiments that disable joins, filtering, or ranking
-- comparisons across different context formats
-
-### 6. Broader automated tests
-
-Still missing:
-
-- tests for benchmark loading
-- tests for evaluation metrics
-- tests for baselines
-- tests for faithfulness and citation validation
-- stronger end-to-end tests
-
-## Current Constraints
-
-From the repo as it stands:
-
-- Anthropic is required for table summarization and final answer generation.
-- SentenceTransformers and HNSW are required for semantic retrieval.
-- The full system depends on external Python packages listed in `requirements.txt`.
-
-## Current Repository Structure
-
-Tracked files relevant to the project:
-
+- `README.md`
+- `requirements.txt`
 - `Documents/Final Project Proposal.md`
-- `lakeprompt/LLM_utilities.py`
+- `Documents/Progress.MD`
 - `lakeprompt/__init__.py`
+- `lakeprompt/LLM_utilities.py`
 - `lakeprompt/datalake.py`
+- `lakeprompt/ingest.py`
 - `lakeprompt/evaluation.py`
 - `lakeprompt/executor.py`
 - `lakeprompt/lakeprompt.py`
@@ -149,13 +21,149 @@ Tracked files relevant to the project:
 - `lakeprompt/packager.py`
 - `lakeprompt/profiler.py`
 - `lakeprompt/retrieval.py`
-- `requirements.txt`
-- `README.md`
+- `lakeprompt/tracing.py`
+
+Ignored items such as `tests/`, local caches, datasets, and demo files are intentionally not part of this summary.
+
+## What Is Implemented
+
+### Core local-lake pipeline
+
+The public package contains a working end-to-end local CSV workflow:
+
+- recursive CSV discovery through nested directories
+- stable table naming for nested CSV paths
+- lazy CSV loading and SQL execution through Polars
+- column profiling with sample values and basic column statistics
+- Jaccard-based joinability signals and join-graph construction
+- semantic retrieval over column cards using SentenceTransformers and HNSW
+- join-path generation
+- join execution and row-level relevance scoring
+- evidence diversity filtering and packaging
+- TOON-based prompt serialization
+- final answer generation through Anthropic
+
+### Public API and data models
+
+The visible exported API currently includes:
+
+- `LakePrompt`
+
+The internal models layer includes structured types for:
+
+- join edges and join paths
+- joined-tuple provenance
+- packaged prompt context
+- structured query plans with filters, projections, grouping, ordering, and limits
+
+### Remote-source ingestion
+
+`LakePrompt.from_url(...)` uses internal ingestion helpers in `lakeprompt/_ingest.py` to normalize:
+
+- direct CSV URLs
+- ZIP archives containing CSV files
+- GitHub repositories, including branch-specific URLs
+
+Prepared sources are cached locally under `.lakeprompt_cache/` when artifacts are enabled.
+
+### Logging and artifacts
+
+The public code supports:
+
+- optional structured stdout tracing through `PipelineLogger`
+- cached table summaries
+- cached prepared remote-source lakes
+- disabling summary-cache writes through `save_artifacts=False`
+
+### Evaluation scaffold
+
+The repo includes `lakeprompt/evaluation.py`, which can:
+
+- read Spider-style join metadata
+- generate join-requiring questions with Claude
+- run a schema-context baseline
+- run LakePrompt on the same schema
+- write JSON and TXT evaluation outputs
+
+## What Is Partially Done
+
+### Proposal alignment
+
+The public code now covers most of the pipeline described in `Documents/Final Project Proposal.md`, including join discovery, joined-tuple retrieval, provenance, and context packaging. The remaining mismatch is mostly around evaluation depth and rigor rather than the core retrieval pipeline.
+
+### Evidence-grounded answers
+
+`LakeAnswer` preserves both evidence rows and `cited_ids`, and the prompt format asks the model to cite evidence IDs. What is still missing is a validation layer that checks whether cited IDs actually support the answer.
+
+### Query planning
+
+The public code includes LLM-based extraction of a structured `QueryPlan`, and downstream stages use that plan to guide join selection and row projection. This is implemented, but it still depends on heuristic execution and graceful fallback rather than a fully validated semantic parser.
+
+### Evaluation
+
+The evaluation module is real and runnable, but it is still a scaffold:
+
+- it generates questions dynamically instead of using a committed benchmark
+- it records examples rather than computing a full metrics suite
+- it depends on external datasets that are not included in the repo
+
+## What Is Still Missing
+
+### Benchmarks in the repo
+
+The public repo does not currently include:
+
+- a committed benchmark dataset
+- stored ground-truth answers
+- stored ground-truth SQL
+- stored gold evidence rows
+
+### Metric computation
+
+The public evaluation code does not yet provide:
+
+- exact-match scoring
+- F1 or partial-credit scoring
+- numeric-tolerance scoring
+- execution-accuracy scoring
+- aggregate benchmark summaries
+
+### Baseline breadth
+
+The proposal mentions several baselines that are not yet fully implemented in the public codebase:
+
+- no-context LLM baseline
+- single-table retrieval baseline
+- naive multi-table concatenation baseline
+- join-without-ranking baseline
+
+### Faithfulness checks
+
+Still missing from the visible repo:
+
+- answer-to-evidence validation
+- unsupported-claim detection
+- citation validation against returned evidence rows
+
+### Public automated tests
+
+No public automated test suite is currently visible in the repo because the `tests/` path is ignored and therefore outside the public repository surface described here.
+
+## Current Constraints
+
+From the public code and dependency list:
+
+- Anthropic is required for multiple stages, including summarization, planning, evaluation question generation, and final answering
+- semantic retrieval depends on `sentence-transformers` and `hnswlib`
+- the pinned dependency set is relatively heavy and currently includes many ML and CUDA packages
+- remote-source workflows and LLM-backed steps require network access at runtime
 
 ## Bottom Line
 
-Based only on the git repo contents:
+Based on the visible repository contents, LakePrompt already exposes a substantial prototype:
 
-- the core LakePrompt pipeline is largely implemented
-- the join-path portion is the main core workflow area still being aligned with the proposal
-- the largest remaining gap after that is evaluation and comparison infrastructure
+- the main local and remote ingestion paths are implemented
+- the join-aware retrieval and evidence-packaging pipeline is implemented
+- structured result objects, logging, and evaluation scaffolding are present
+
+The largest remaining public gaps are benchmark assets, scoring infrastructure, citation validation, and broader public-facing validation of the system.

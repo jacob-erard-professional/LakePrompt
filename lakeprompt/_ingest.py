@@ -14,7 +14,7 @@ USER_AGENT = "LakePrompt/1.0"
 
 
 @dataclass
-class PreparedLake:
+class _PreparedLake:
     """
     Description of a prepared local CSV lake derived from a remote source.
 
@@ -28,7 +28,7 @@ class PreparedLake:
     source_type: str
 
 
-class DataLakePreparer:
+class _DataLakePreparer:
     """
     Download and normalize supported remote sources into a local CSV lake.
 
@@ -55,7 +55,7 @@ class DataLakePreparer:
         self.cache_root = Path(cache_root or ".lakeprompt_cache").expanduser()
         self.cache_root.mkdir(parents=True, exist_ok=True)
 
-    def prepare(self, source_url: str) -> PreparedLake:
+    def prepare(self, source_url: str) -> _PreparedLake:
         """
         Prepare a remote source as a local CSV lake.
 
@@ -64,14 +64,14 @@ class DataLakePreparer:
                 or GitHub repository.
 
         Returns:
-            A `PreparedLake` describing the prepared local dataset.
+            A `_PreparedLake` describing the prepared local dataset.
         """
         source_type = self._detect_source_type(source_url)
         lake_id = hashlib.sha256(source_url.encode("utf-8")).hexdigest()[:16]
         target_dir = self.cache_root / lake_id / "lake"
 
         if target_dir.exists() and any(target_dir.glob("*.csv")):
-            return PreparedLake(
+            return _PreparedLake(
                 source_url=source_url,
                 prepared_dir=target_dir,
                 source_type=source_type,
@@ -94,7 +94,7 @@ class DataLakePreparer:
         if not csv_files:
             raise ValueError(f"No CSV files were prepared from source: {source_url}")
 
-        return PreparedLake(
+        return _PreparedLake(
             source_url=source_url,
             prepared_dir=target_dir,
             source_type=source_type,

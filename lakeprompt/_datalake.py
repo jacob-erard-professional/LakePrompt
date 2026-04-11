@@ -2,6 +2,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import polars as pl
 
+
+DEFAULT_INFER_SCHEMA_LENGTH = 10_000
+DEFAULT_NULL_VALUES = ["-"]
+
+
 @dataclass
 class DataLake:
     """
@@ -70,12 +75,37 @@ class DataLake:
                 f"Lake directory not found: {self.lake_dir}"
             )
         
-        csv_files = list(self.lake_dir.glob("*.csv"))
+        csv_files = sorted(self.lake_dir.rglob("*.csv"))
         if not csv_files:
             raise ValueError(f"No CSV files found in: {self.lake_dir}")
 
+        used_names: set[str] = set()
         for path in csv_files:
-            self.tables[path.stem] = pl.scan_csv(str(path))
+            table_name = self._table_name_from_path(path, used_names)
+            self.tables[table_name] = pl.scan_csv(
+                str(path),
+                infer_schema_length=DEFAULT_INFER_SCHEMA_LENGTH,
+                null_values=DEFAULT_NULL_VALUES,
+                ignore_errors=True,
+            )
+
+    def _table_name_from_path(self, csv_path: Path, used_names: set[str]) -> str:
+        """
+        Build a stable table name for a CSV path, including nested paths when needed.
+
+        Nested directory components are preserved to avoid collisions between
+        files that share the same basename in different folders.
+        """
+        relative = csv_path.relative_to(self.lake_dir)
+        parts = list(relative.parts)
+        stemmed = "__".join(Path(part).stem for part in parts[:-1] + [relative.name])
+        candidate = stemmed
+        counter = 2
+        while candidate in used_names:
+            candidate = f"{stemmed}_{counter}"
+            counter += 1
+        used_names.add(candidate)
+        return candidate
 
     def query(self, sql: str) -> pl.DataFrame:
         """
