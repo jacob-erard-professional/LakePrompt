@@ -174,5 +174,33 @@ class LakeProfiler:
         Returns:
             A list of JoinPaths sorted by relevance score.
         """
-        # TODO: Find a way to do this, and ask ppl about what score means in joinpath.#
-        # Do u mean join do we execute join path or add to join path to context?
+        if not self.lake.join_graph:
+            raise ValueError("Join graph not found. Please run profile() first.")
+
+        paths: list[JoinPath] = []
+        seen_tables: set[str] = set()
+
+        for card in relevant_cards:
+            table = card.table_name
+            seen_tables.add(table)
+            paths.append(JoinPath(tables=[table], join_keys=[], score=1.0, estimated_output_rows=0))
+
+        for card in relevant_cards:
+            table = card.table_name
+            for edge in self.lake.join_graph.get(table, []):
+                if edge["to_table"] in seen_tables:
+                    continue
+
+                join_score = edge["score"]
+                if join_score < self._jaccard_threshold:
+                    continue
+
+                paths.append(JoinPath(
+                    tables=[table, edge["to_table"]],
+                    join_keys=[(table, edge["left_column"], edge["to_table"], edge["right_column"])],
+                    score=join_score,
+                    estimated_output_rows=0,
+                ))
+
+        paths.sort(key=lambda p: p.score, reverse=True)
+        return paths[:max_paths]

@@ -188,11 +188,15 @@ class TupleExecutor:
         Returns:
             A (possibly empty) list of row dicts.
         """
-        try:
-            sql = self._build_join_sql(path, filter_clause)
-        except ValueError as exc:
-            logger.warning("Skipping malformed JoinPath: %s", exc)
-            return []
+        if len(path.tables) == 1:
+            where = f" WHERE {filter_clause}" if filter_clause else ""
+            sql = f"SELECT * FROM {path.tables[0]}{where}"
+        else:
+            try:
+                sql = self._build_join_sql(path, filter_clause)
+            except ValueError as exc:
+                logger.warning("Skipping malformed JoinPath: %s", exc)
+                return []
 
         if question and not filter_clause:
             sql = self._extract_filters(question, sql, path)

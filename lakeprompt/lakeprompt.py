@@ -1,5 +1,10 @@
+import json
+import os
+
+from openai import OpenAI
+
 from .datalake import DataLake
-from .models import LakeAnswer, LakeContext
+from .models import LakeAnswer
 from .profiler import LakeProfiler
 from .LLM_utilities import generate_table_summaries
 from .retrieval import SemanticRetriever
@@ -56,6 +61,7 @@ class LakePrompt:
         self.retriever.build_index()
 
         # 5. Initialise remaining pipeline modules
+        self.model = model
         self.executor = TupleExecutor(self.lake)
         self.packager = ContextPackager(self.lake)
 
@@ -80,5 +86,38 @@ class LakePrompt:
         context = self.packager.build_context(question, tuples)
         answer  = self._llm_complete(context.prompt)
         
-        # 
         return LakeAnswer(text=answer, evidence=context.evidence)
+
+    def _llm_complete(self, prompt: str) -> str:
+        """
+        Send a packaged prompt to the LLM and return the answer text.
+
+        The prompt is expected to request a JSON response with an
+        ``answer`` key (as produced by ContextPackager.build_context).
+        If the response cannot be parsed as JSON, the raw content is
+        returned so the caller always receives a non-empty string.
+
+        Args:
+            prompt: A fully assembled TOON-encoded prompt string.
+
+        Returns:
+            The answer string extracted from the model's JSON response,
+            or the raw response content if JSON parsing fails.
+        """
+        client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.environ["OPENROUTER_API_KEY"],
+        )
+
+        response = client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = response.choices[0].message.content.strip()
+
+        try:
+            parsed = json.loads(raw)
+            return parsed.get("answer", raw)
+        except json.JSONDecodeError:
+            return raw
