@@ -1,15 +1,16 @@
 import logging
 logger = logging.getLogger(__name__)
 
+from collections import defaultdict
 from dataclasses import dataclass
-from .datalake import _DataLake
-from .models import JoinPath, JoinedTuple
+from .datalake import DataLake
+from .models import JoinPath, JoinedTuple, JoinProvenance
 from .LLM_utilities import apply_llm_filters_to_sql
 
 """
 TupleExecutor — Stream S3 of the LakePrompt pipeline.
 
-Receives JoinPath objects, executes the joins against the internal lake,
+Receives JoinPath objects, executes the joins against the DataLake,
 ranks the resulting rows, and returns the top-r rows as JoinedTuple
 evidence objects for the packager.
 """
@@ -25,18 +26,16 @@ _ST_MODEL: object = None
 @dataclass
 class TupleExecutor:
     """
-    Executes join paths against the internal lake and returns ranked evidence tuples.
+    Executes join paths against the DataLake and returns ranked evidence tuples.
 
-    Rows are scored by the average cosine similarity between the question
-    embedding and the ColumnCard embeddings for the path's tables.  All rows
-    from the same join path receive the same score, so ranking differentiates
-    across paths rather than within them.
+    Rows are scored individually after execution, then diversity-filtered so
+    the final evidence set is not flooded by near-duplicate rows.
 
     Args:
-        lake: An initialised internal lake instance.
+        lake: An initialised DataLake instance.
     """
 
-    lake: _DataLake
+    lake: DataLake
 
     # Public API
     def get_tuples(
@@ -57,12 +56,7 @@ class TupleExecutor:
             A list of at most top_r JoinedTuple objects, sorted by descending
             relevance score.
         """
-        # Embed the question once; reuse for every path.
         q_emb = self._embed_question(question)
-
-        # Accumulate (score, row, path) across all join paths so we can rank
-        # globally and pick the best top_r tuples regardless of which path
-        # they came from.
         all_scored: list[tuple[float, dict, JoinPath]] = []
 
         for path in paths:
@@ -70,12 +64,12 @@ class TupleExecutor:
             if not rows:
                 continue
 
-            for score, row in self._rank_by_card_similarity(rows, q_emb, path):
+            for score, row in self._score_rows(rows, q_emb, path):
                 all_scored.append((score, row, path))
 
-        # Sort globally so the highest-scoring rows from any path rise to the top.
         all_scored.sort(key=lambda x: x[0], reverse=True)
-        return self._to_joined_tuples(all_scored[:top_r])
+        diverse = self._select_diverse_rows(all_scored, top_r=top_r)
+        return self._to_joined_tuples(diverse)
 
     # SQL query building
     def _build_join_sql(self, path: JoinPath, filter_clause: str = "") -> str:
@@ -90,7 +84,7 @@ class TupleExecutor:
             filter_clause: Optional SQL WHERE fragment (no 'WHERE' keyword).
 
         Returns:
-            A complete SQL query string ready for the lake query engine.
+            A complete SQL query string ready for DataLake.query().
 
         Raises:
             ValueError: If path.tables contains fewer than two entries.
@@ -134,8 +128,8 @@ class TupleExecutor:
         """
         Return (table, column, alias) triples for all columns across tables.
 
-        Columns that appear in more than one table are aliased as
-        '<table>__<column>' to avoid key collisions in result dicts.
+        In multi-table joins, every column is aliased as '<table>__<column>'
+        so downstream tuple ranking sees stable table-qualified row keys.
 
         Args:
             tables: Ordered list of table names in the join.
@@ -143,9 +137,6 @@ class TupleExecutor:
         Returns:
             List of (table_name, column_name, alias) tuples.
         """
-        # First pass: count how many tables each column name appears in.
-        # Any column with a count > 1 needs an alias to avoid collisions.
-        col_count: dict[str, int] = {}
         table_cols: dict[str, list[str]] = {}
 
         for tbl in tables:
@@ -156,16 +147,10 @@ class TupleExecutor:
             # Fetch a single row just to get the column names — no data needed.
             cols = self.lake.get_sample(tbl, n=1).columns
             table_cols[tbl] = cols
-            for col in cols:
-                col_count[col] = col_count.get(col, 0) + 1
-
-        # Second pass: build the alias list. Columns shared across tables get
-        # prefixed with their table name (e.g. customers__customer_id).
         result: list[tuple[str, str, str]] = []
         for tbl in tables:
             for col in table_cols.get(tbl, []):
-                alias = f"{tbl}__{col}" if col_count.get(col, 1) > 1 else col
-                result.append((tbl, col, alias))
+                result.append((tbl, col, f"{tbl}__{col}"))
 
         return result
 
@@ -248,7 +233,6 @@ class TupleExecutor:
             )
             return sql
 
-    # Ranking rows based on ColumnCard similarity
     def _embed_question(self, question: str) -> "np.ndarray | None":  # type: ignore[name-defined]
         """
         Encode the question with SentenceTransformer and return a unit vector.
@@ -269,21 +253,15 @@ class TupleExecutor:
 
         return _ST_MODEL.encode(question, normalize_embeddings=True)  # type: ignore[union-attr]
 
-    def _rank_by_card_similarity(
+    def _score_rows(
         self,
         rows: list[dict],
         q_emb: "np.ndarray | None",  # type: ignore[name-defined]
         path: JoinPath,
     ) -> list[tuple[float, dict]]:
         """
-        Score rows by the average cosine similarity between the question and
-        the ColumnCard embeddings for the path's tables.
-
-        All rows in a path receive the same score because they share the same
-        set of contributing tables/cards.  Ranking therefore differentiates
-        across paths, not within them.
-
-        Falls back to score 0.0 per row if embeddings are unavailable.
+        Score rows individually using row text similarity plus a light
+        path-coverage bonus.
 
         Args:
             rows: Raw row dicts from _execute_path.
@@ -293,37 +271,154 @@ class TupleExecutor:
         Returns:
             List of (score, row) pairs sorted by descending score.
         """
-        score = 0.0
+        scored_rows: list[tuple[float, dict]] = []
+        path_table_set = set(path.tables)
+        relevant_columns = [
+            card.column_name
+            for card in (getattr(self.lake, "cards", None) or [])
+            if card.table_name in path_table_set
+        ]
+        coverage_bonus = self._path_coverage_bonus(path, relevant_columns)
 
-        if q_emb is not None:
-            try:
-                import numpy as np
-            except ImportError:
-                pass
-            else:
-                path_table_set = set(path.tables)
-                embedded_cards = [
-                    card
-                    for card in (getattr(self.lake, "cards", None) or [])
-                    if card.table_name in path_table_set and card.embedding is not None
-                ]
+        for row in rows:
+            row_score = self._row_semantic_score(row, q_emb)
+            row_score += coverage_bonus
+            row_score += self._row_value_coverage_bonus(row, path)
+            scored_rows.append((row_score, row))
 
-                if not embedded_cards:
-                    logger.warning(
-                        "No embedded ColumnCards found for path %s; scoring rows as 0.0.",
-                        path.tables,
-                    )
-                else:
-                    card_matrix = np.array([card.embedding for card in embedded_cards])
-                    # Normalise in case cards were stored without unit-length guarantee.
-                    norms = np.linalg.norm(card_matrix, axis=1, keepdims=True)
-                    norms = np.where(norms == 0, 1.0, norms)
-                    card_matrix = card_matrix / norms
-                    score = float((card_matrix @ q_emb).mean())
+        scored_rows.sort(key=lambda item: item[0], reverse=True)
+        return scored_rows
 
-        return [(score, row) for row in rows]
+    def _row_semantic_score(
+        self,
+        row: dict,
+        q_emb: "np.ndarray | None",  # type: ignore[name-defined]
+    ) -> float:
+        """
+        Score a row by embedding similarity against the question.
+        """
+        if q_emb is None:
+            return 0.0
 
-    # Packaging the rows
+        try:
+            import numpy as np
+        except ImportError:
+            return 0.0
+
+        row_text = self._row_to_text(row)
+        if not row_text.strip():
+            return 0.0
+
+        global _ST_MODEL
+        if _ST_MODEL is None:
+            return 0.0
+
+        row_emb = _ST_MODEL.encode(row_text, normalize_embeddings=True)  # type: ignore[union-attr]
+        return float(np.dot(row_emb, q_emb))
+
+    def _path_coverage_bonus(self, path: JoinPath, relevant_columns: list[str]) -> float:
+        """
+        Reward paths that cover more relevant tables and columns.
+        """
+        table_bonus = 0.03 * len(path.tables)
+        column_bonus = 0.005 * len(set(relevant_columns))
+        return table_bonus + min(column_bonus, 0.05)
+
+    def _row_value_coverage_bonus(self, row: dict, path: JoinPath) -> float:
+        """
+        Reward rows that carry values from more joined tables.
+        """
+        populated_tables = 0
+        for table in path.tables:
+            has_value = any(
+                value is not None
+                for key, value in row.items()
+                if key.startswith(f"{table}__")
+            )
+            if has_value:
+                populated_tables += 1
+
+        if len(path.tables) == 1 and row:
+            populated_tables = 1
+
+        return 0.04 * (populated_tables / max(len(path.tables), 1))
+
+    def _row_to_text(self, row: dict) -> str:
+        """
+        Convert a row into a stable table-qualified text representation.
+        """
+        parts: list[str] = []
+        for key in sorted(row):
+            value = row[key]
+            if value is None:
+                continue
+            parts.append(f"{key}={value}")
+        return " | ".join(parts)
+
+    def _select_diverse_rows(
+        self,
+        ranked: list[tuple[float, dict, JoinPath]],
+        top_r: int,
+    ) -> list[tuple[float, dict, JoinPath]]:
+        """
+        Greedily select the best rows while penalizing near-duplicates from
+        the same join path.
+        """
+        selected: list[tuple[float, dict, JoinPath]] = []
+        selected_tokens_by_path: dict[str, list[set[str]]] = defaultdict(list)
+
+        for base_score, row, path in ranked:
+            row_tokens = self._row_token_set(row)
+            similarity_penalty = 0.0
+
+            for existing_tokens in selected_tokens_by_path[path.path_id]:
+                similarity_penalty = max(
+                    similarity_penalty,
+                    self._token_jaccard_similarity(row_tokens, existing_tokens),
+                )
+
+            adjusted_score = base_score - (0.15 * similarity_penalty)
+            if similarity_penalty >= 0.98:
+                continue
+
+            inserted = False
+            for index, (current_score, _, _) in enumerate(selected):
+                if adjusted_score > current_score:
+                    selected.insert(index, (adjusted_score, row, path))
+                    inserted = True
+                    break
+            if not inserted:
+                selected.append((adjusted_score, row, path))
+
+            selected_tokens_by_path[path.path_id].append(row_tokens)
+            if len(selected) >= top_r:
+                selected = selected[:top_r]
+
+        return selected[:top_r]
+
+    def _row_token_set(self, row: dict) -> set[str]:
+        """
+        Convert a row into a coarse token set for duplicate suppression.
+        """
+        tokens: set[str] = set()
+        for key, value in row.items():
+            if value is None:
+                continue
+            tokens.add(str(key).lower())
+            tokens.update(str(value).lower().split())
+        return tokens
+
+    @staticmethod
+    def _token_jaccard_similarity(left: set[str], right: set[str]) -> float:
+        """
+        Return Jaccard similarity between two token sets.
+        """
+        if not left and not right:
+            return 1.0
+        if not left or not right:
+            return 0.0
+        return len(left & right) / len(left | right)
+
     def _to_joined_tuples(
         self,
         ranked: list[tuple[float, dict, JoinPath]],
@@ -344,7 +439,12 @@ class TupleExecutor:
             JoinedTuple(
                 evidence_id=f"E{idx}",  # E1, E2, E3, … used by the packager to cite evidence
                 data=row,
-                provenance=list(path.tables),  # which tables contributed to this row (the path)
+                provenance=JoinProvenance(
+                    path_id=path.path_id,
+                    tables=list(path.tables),
+                    join_keys=list(path.join_keys),
+                    path_score=path.score,
+                ),
                 join_path=path,
                 relevance_score=score,
             )

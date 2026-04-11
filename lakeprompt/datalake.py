@@ -3,9 +3,9 @@ from pathlib import Path
 import polars as pl
 
 @dataclass
-class _DataLake:
+class DataLake:
     """
-    Internal representation of a data lake for use across LakePrompt.
+    Central representation of a data lake for use across LakePrompt.
 
     Scans a directory of CSV files and registers each as a named table
     using Polars lazy frames.
@@ -14,7 +14,7 @@ class _DataLake:
         lake_dir: Path to the directory containing CSV files.
 
     Example:
-        >>> lake = _DataLake.load("./data/csvs")
+        >>> lake = DataLake.load("./data/csvs")
         >>> lake.query("SELECT * FROM customers WHERE city = 'Denver'")
     """
 
@@ -24,9 +24,9 @@ class _DataLake:
     join_graph: dict = field(default_factory=dict)
 
     @classmethod
-    def load(cls, lake_dir: str) -> "_DataLake":
+    def load(cls, lake_dir: str) -> "DataLake":
         """
-        Scan a directory of CSV files and return an initialised internal lake.
+        Scan a directory of CSV files and return an initialised DataLake.
 
         Each CSV becomes a named table using the filename without extension
         (e.g. 'customers.csv' → 'customers'). Tables are loaded lazily —
@@ -128,4 +128,4 @@ class _DataLake:
         return set(sample[col].drop_nulls().cast(pl.Utf8).unique().to_list())
 
     def __repr__(self) -> str:
-        return f"_DataLake(tables={list(self.tables.keys())})"
+        return f"DataLake(tables={list(self.tables.keys())})"

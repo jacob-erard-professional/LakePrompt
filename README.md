@@ -1,39 +1,13 @@
 # LakePrompt
-LakePrompt Research project for CS4964
+LakePrompt research project for CS4964.
 
-## AI acknoledgment
-Claude Opus 4.6 was used to enhance the docstrings, write tests,
+## Overview
 
-### How each AI was utilized
-
-Claude Opus 4.6
-- Enhancing docstrings
-
-Codex
-- Refactoring repository to use polars only (original workflow used spark)
-- Bringing to life our idea of evaluating claude's accuracy with and without lake prompt
-
-## Acknowledgments
-
-This project builds on several external datasets, specifications, and open-source libraries.
-
-- Spider Join Data: evaluation planning in this repo uses the `superctj/spider-join-data` repository, which is derived from the broader Spider text-to-SQL benchmark ecosystem.
-- Spider dataset: please credit the original Spider dataset authors when using Spider-derived data:
-  Tao Yu, Rui Zhang, Kai Yang, Michihiro Yasunaga, Dongxu Wang, Zifan Li, James Ma, Irene Li, Qingning Yao, Shanelle Roman, Zilin Zhang, and Dragomir Radev. 2018. *Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task*. Proceedings of EMNLP 2018. DOI: `10.18653/v1/D18-1425`.
-- TOON: prompt serialization work in this repo is based on Token-Oriented Object Notation (TOON), using the public `toon-format` specification and reference implementation ecosystem. Credit to the TOON project and Johann Schopplich.
-- Open-source software: this project also relies on the maintainers and contributors behind `polars`, `numpy`, `hnswlib`, `sentence-transformers`, and the `anthropic` Python SDK.
-
-References:
-
-- Spider Join Data: https://github.com/superctj/spider-join-data
-- Spider paper: https://aclanthology.org/D18-1425/
-- Spider dataset repository: https://github.com/taoyds/spider
-- TOON specification: https://github.com/toon-format/spec
-- TOON reference implementation: https://github.com/toon-format/toon
+LakePrompt is a prototype for answering natural-language questions over a folder of CSV files. It loads the tables, profiles columns, retrieves relevant columns semantically, finds join paths, executes queries, packages evidence for an LLM, and returns an answer with supporting evidence.
 
 ## User Interface
 
-The main user-facing interface is `LakePrompt`. A user provides a directory of CSV files, asks a natural-language question, and receives a `LakeAnswer` containing both the answer text and the supporting evidence rows.
+The main user-facing interface is `LakePrompt`. A user provides a directory of CSV files, asks a natural-language question, and receives a `LakeAnswer` containing answer text, supporting evidence rows, and cited evidence IDs.
 
 ### What the user provides
 
@@ -50,10 +24,25 @@ Each file becomes a table internally, using the filename without the `.csv` exte
 
 ### Required setup
 
-`LakePrompt` calls Anthropic during table summarization and final answer generation, so the environment must include:
+LakePrompt calls Anthropic during table summarization and final answer generation, so the environment must include:
 
 ```bash
 export ANTHROPIC_API_KEY="your_api_key_here"
+```
+
+Create and activate a local virtual environment, then install dependencies:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+If you need to refresh `requirements.txt` from the active virtual environment:
+
+```bash
+python -m pip freeze > requirements.txt
 ```
 
 ### Constructor interface
@@ -102,12 +91,14 @@ This runs the full pipeline:
 
 ```python
 print(answer.text)
+print(answer.cited_ids)
 print(answer.evidence)
 ```
 
 Its fields are:
 
 - `answer.text`: the natural-language answer returned by the model
+- `answer.cited_ids`: evidence IDs cited by the model response
 - `answer.evidence`: a list of evidence rows used to support that answer
 
 ### Minimal end-to-end example
@@ -121,6 +112,9 @@ answer = lp.query("What are the top 3 products by total sales?")
 print("Answer:")
 print(answer.text)
 
+print("\nCitations:")
+print(answer.cited_ids)
+
 print("\nEvidence:")
 for row in answer.evidence[:3]:
     print(row.evidence_id, row.data)
@@ -131,4 +125,22 @@ for row in answer.evidence[:3]:
 1. Place related CSV files in one directory.
 2. Initialize `LakePrompt` with that directory.
 3. Call `query(...)` with a natural-language question.
-4. Read `answer.text` for the response and `answer.evidence` for supporting tuples.
+4. Read `answer.text` for the response, `answer.cited_ids` for cited evidence, and `answer.evidence` for supporting tuples.
+
+## Acknowledgments
+
+This project builds on several external datasets, specifications, and open-source libraries.
+
+- Spider Join Data: evaluation planning in this repo uses the `superctj/spider-join-data` repository, which is derived from the broader Spider text-to-SQL benchmark ecosystem.
+- Spider dataset: please credit the original Spider dataset authors when using Spider-derived data:
+  Tao Yu, Rui Zhang, Kai Yang, Michihiro Yasunaga, Dongxu Wang, Zifan Li, James Ma, Irene Li, Qingning Yao, Shanelle Roman, Zilin Zhang, and Dragomir Radev. 2018. *Spider: A Large-Scale Human-Labeled Dataset for Complex and Cross-Domain Semantic Parsing and Text-to-SQL Task*. Proceedings of EMNLP 2018. DOI: `10.18653/v1/D18-1425`.
+- TOON: prompt serialization work in this repo is based on Token-Oriented Object Notation (TOON), using the public `toon-format` specification and reference implementation ecosystem. Credit to the TOON project and Johann Schopplich.
+- Open-source software: this project also relies on the maintainers and contributors behind `polars`, `numpy`, `hnswlib`, `sentence-transformers`, and the `anthropic` Python SDK.
+
+References:
+
+- Spider Join Data: https://github.com/superctj/spider-join-data
+- Spider paper: https://aclanthology.org/D18-1425/
+- Spider dataset repository: https://github.com/taoyds/spider
+- TOON specification: https://github.com/toon-format/spec
+- TOON reference implementation: https://github.com/toon-format/toon

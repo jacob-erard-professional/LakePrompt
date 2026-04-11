@@ -85,6 +85,7 @@ class LakeAnswer:
     """
     text: str
     evidence: list[JoinedTuple]
+    cited_ids: list[str] = field(default_factory=list)
     
 @dataclass
 class ColumnCard:
