@@ -360,16 +360,33 @@ class TupleExecutor:
         sql = f"SELECT {', '.join(select_parts)}\nFROM {_quote_identifier(tables[0])}"
 
         for t1, col1, t2, col2 in join_keys:
+            left_join_expr = self._join_operand_sql(t1, col1)
+            right_join_expr = self._join_operand_sql(t2, col2)
             sql += (
                 f"\nJOIN {_quote_identifier(t2)} "
-                f"ON {_quote_identifier(t1)}.{_quote_identifier(col1)} = "
-                f"{_quote_identifier(t2)}.{_quote_identifier(col2)}"
+                f"ON {left_join_expr} = {right_join_expr}"
             )
 
         if filter_clause:
             sql += f"\nWHERE {filter_clause}"
 
         return sql
+
+    def _join_operand_sql(self, table_name: str, column_name: str) -> str:
+        """
+        Return a SQL expression for a join operand.
+
+        String join keys are trimmed at execution time so profiling-time
+        normalization matches actual SQL join behavior.
+        """
+        column_sql = f"{_quote_identifier(table_name)}.{_quote_identifier(column_name)}"
+        try:
+            dtype = str(self.lake.get_sample(table_name, n=1)[column_name].dtype).lower()
+        except Exception:  # noqa: BLE001
+            return column_sql
+        if "string" in dtype:
+            return f"TRIM({column_sql})"
+        return column_sql
 
     def _build_column_aliases(
         self, tables: list[str]

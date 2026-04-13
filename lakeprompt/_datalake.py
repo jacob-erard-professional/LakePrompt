@@ -82,12 +82,23 @@ class DataLake:
         used_names: set[str] = set()
         for path in csv_files:
             table_name = self._table_name_from_path(path, used_names)
-            self.tables[table_name] = pl.scan_csv(
+            lazy_frame = pl.scan_csv(
                 str(path),
                 infer_schema_length=DEFAULT_INFER_SCHEMA_LENGTH,
                 null_values=DEFAULT_NULL_VALUES,
                 ignore_errors=True,
             )
+            schema = lazy_frame.collect_schema()
+            string_columns = [
+                name
+                for name, dtype in schema.items()
+                if str(dtype).lower() == "string"
+            ]
+            if string_columns:
+                lazy_frame = lazy_frame.with_columns(
+                    [pl.col(name).str.strip_chars().alias(name) for name in string_columns]
+                )
+            self.tables[table_name] = lazy_frame
 
     def _table_name_from_path(self, csv_path: Path, used_names: set[str]) -> str:
         """
@@ -181,7 +192,15 @@ class DataLake:
                 f"Column '{col}' not found in '{table_name}'. "
                 f"Available: {sample.columns}"
             )
-        return set(sample[col].drop_nulls().cast(pl.Utf8).unique().to_list())
+        values = (
+            sample[col]
+            .drop_nulls()
+            .cast(pl.Utf8)
+            .str.strip_chars()
+            .unique()
+            .to_list()
+        )
+        return {value for value in values if value}
 
     def __repr__(self) -> str:
         return f"DataLake(tables={list(self.tables.keys())})"

@@ -194,7 +194,12 @@ class LakeProfiler:
                             right_table=right_table,
                             right_column=right_card.column_name,
                         )
-                        effective_score = max(score * compatibility, heuristic_score)
+                        fallback_score = self._high_overlap_fallback_score(
+                            left_card=left_card,
+                            right_card=right_card,
+                            jaccard_score=score,
+                        )
+                        effective_score = max(score * compatibility, heuristic_score, fallback_score)
 
                         if effective_score < self._jaccard_threshold:
                             continue
@@ -212,6 +217,7 @@ class LakeProfiler:
                                 "score": effective_score,
                                 "jaccard_score": score,
                                 "schema_score": heuristic_score,
+                                "fallback_score": fallback_score,
                                 "compatibility": compatibility,
                             },
                         )
@@ -252,6 +258,60 @@ class LakeProfiler:
             return 0.65
         return 0.0
 
+    def _high_overlap_fallback_score(
+        self,
+        *,
+        left_card: ColumnCard,
+        right_card: ColumnCard,
+        jaccard_score: float,
+    ) -> float:
+        """
+        Allow a conservative fallback join score for near-identical
+        string/code domains even when column names do not match.
+
+        This is meant for cases like `sourceairport` -> `airportcode`,
+        while avoiding accidental joins between unrelated surrogate keys.
+        """
+        if jaccard_score < 0.95:
+            return 0.0
+        if not self._cards_are_string_like(left_card, right_card):
+            return 0.0
+        if self._cards_are_both_surrogate_like(left_card, right_card):
+            return 0.0
+        if self._cards_are_both_numeric_like(left_card, right_card):
+            return 0.0
+        if not self._fallback_name_pattern_ok(left_card.column_name, right_card.column_name):
+            return 0.0
+        if not (
+            max(left_card.foreign_key_score, right_card.foreign_key_score) >= 0.45
+            or self._name_suggests_reference(left_card.column_name)
+            or self._name_suggests_reference(right_card.column_name)
+        ):
+            return 0.0
+        return 0.95
+
+    def _cards_are_string_like(self, left_card: ColumnCard, right_card: ColumnCard) -> bool:
+        return "string" in left_card.dtype.lower() and "string" in right_card.dtype.lower()
+
+    def _cards_are_both_surrogate_like(self, left_card: ColumnCard, right_card: ColumnCard) -> bool:
+        return left_card.surrogate_key_score >= 0.7 and right_card.surrogate_key_score >= 0.7
+
+    def _cards_are_both_numeric_like(self, left_card: ColumnCard, right_card: ColumnCard) -> bool:
+        numeric_markers = ("int", "float", "double", "decimal")
+        return (
+            any(marker in left_card.dtype.lower() for marker in numeric_markers)
+            and any(marker in right_card.dtype.lower() for marker in numeric_markers)
+        )
+
+    def _fallback_name_pattern_ok(self, left_column: str, right_column: str) -> bool:
+        left = left_column.lower()
+        right = right_column.lower()
+        if self._name_suggests_reference(left) and self._name_suggests_code_key(right):
+            return True
+        if self._name_suggests_reference(right) and self._name_suggests_code_key(left):
+            return True
+        return False
+
     def _column_name_compatibility(self, left_column: str, right_column: str) -> float:
         """
         Return a lightweight schema-name compatibility score for a pair of
@@ -270,6 +330,28 @@ class LakeProfiler:
         if self._name_suggests_key(left) and self._name_suggests_key(right):
             return 0.0
         return 0.0
+
+    def _name_suggests_reference(self, column_name: str) -> bool:
+        normalized = column_name.lower()
+        return (
+            normalized.startswith("source")
+            or normalized.startswith("dest")
+            or normalized.startswith("from")
+            or normalized.startswith("to")
+            or normalized.endswith("airport")
+            or normalized.endswith("airline")
+            or normalized.endswith("code")
+        )
+
+    def _name_suggests_code_key(self, column_name: str) -> bool:
+        normalized = column_name.lower()
+        return (
+            normalized.endswith("code")
+            or normalized.endswith("uid")
+            or normalized.endswith("abbreviation")
+            or normalized == "uid"
+            or normalized == "code"
+        )
 
     def _name_suggests_key(self, column_name: str) -> bool:
         normalized = column_name.lower()
