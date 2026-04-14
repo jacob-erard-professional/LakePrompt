@@ -63,12 +63,15 @@ class JoinProvenance:
         tables: Ordered list of tables used in the path.
         join_keys: Ordered join keys used by the path.
         path_score: Planner score assigned to the source path.
+        sql: Final executed SQL query, normalized to a single line for
+            easier logging and downstream display.
     """
 
     path_id: str
     tables: list[str]
     join_keys: list[tuple[str, str, str, str]]
     path_score: float
+    sql: str
 
 
 @dataclass

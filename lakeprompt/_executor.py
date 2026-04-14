@@ -1,20 +1,19 @@
 import logging
 logger = logging.getLogger(__name__)
 
-from collections import defaultdict
 from dataclasses import dataclass
-from dataclasses import replace
 from ._datalake import DataLake
-from ._models import JoinPath, JoinedTuple, JoinProvenance, QueryFilter, QueryOrder, QueryPlan, QuerySelect
-from ._llm_utilities import plan_llm_query
+from ._executor_ranking import RowRanker
+from ._executor_sql import QueryPlanApplier, SqlBuilder, query_plan_tables
+from ._models import JoinPath, JoinedTuple, JoinProvenance, QueryPlan
 from ._tracing import NULL_LOGGER, PipelineLogger
 
 """
 TupleExecutor — Stream S3 of the LakePrompt pipeline.
 
-Receives JoinPath objects, executes the joins against the DataLake,
-ranks the resulting rows, and returns the top-r rows as JoinedTuple
-evidence objects for the packager.
+This module coordinates path execution and tuple packaging.
+It is needed because the pipeline must turn candidate join paths into
+ranked evidence tuples without exposing the helper layers to callers.
 """
 
 
@@ -22,239 +21,27 @@ evidence objects for the packager.
 DEFAULT_TOP_R = 20
 DEFAULT_MAX_PATHS_TO_EXECUTE = 3
 
-# model cache so SentenceTransformer is only loaded once per process.
-_ST_MODEL: object = None
 
-
-def _quote_identifier(identifier: str) -> str:
+def _normalize_sql(sql: str) -> str:
     """
-    Quote a SQL identifier for Polars SQL.
+    Normalize SQL to a single-line string.
+
+    This helper is needed because evidence provenance should carry the
+    executed SQL without embedded newlines or irregular spacing.
     """
-    escaped = identifier.replace('"', '""')
-    return f'"{escaped}"'
-
-
-def _quote_sql_value(value: object) -> str:
-    """
-    Convert a Python value into a SQL literal.
-
-    This helper is needed so structured query plans can be compiled back
-    into executable SQL consistently.
-
-    Args:
-        value: Python value to serialize into SQL.
-
-    Returns:
-        A SQL literal string such as `NULL`, `TRUE`, `123`, or `'text'`.
-    """
-    if value is None:
-        return "NULL"
-    if isinstance(value, bool):
-        return "TRUE" if value else "FALSE"
-    if isinstance(value, (int, float)):
-        return str(value)
-    escaped = str(value).replace("'", "''")
-    return f"'{escaped}'"
-
-
-def _qualified_column(column: str, table: str | None = None) -> str:
-    """
-    Return a stable SQL column reference.
-
-    This helper is needed because query-plan fragments may specify either
-    bare columns or table-qualified columns.
-
-    Args:
-        column: Column name, possibly already qualified.
-        table: Optional table name to prefix when the column is unqualified.
-
-    Returns:
-        A SQL-ready column reference.
-    """
-    if "." in column:
-        left, right = column.split(".", 1)
-        return f'{_quote_identifier(left)}.{_quote_identifier(right)}'
-    if table:
-        return f"{_quote_identifier(table)}.{_quote_identifier(column)}"
-    return _quote_identifier(column)
-
-
-def _filter_to_sql(filter_: QueryFilter) -> str:
-    """
-    Convert a structured filter into a SQL predicate.
-
-    Args:
-        filter_: Structured filter extracted from the question.
-
-    Returns:
-        A SQL predicate string suitable for `WHERE` or `HAVING`.
-    """
-    column_sql = _qualified_column(filter_.column, filter_.table)
-    operator = filter_.operator.upper()
-    value = filter_.value
-
-    if operator in {"IN", "NOT IN"} and isinstance(value, list):
-        values = ", ".join(_quote_sql_value(item) for item in value)
-        return f"{column_sql} {operator} ({values})"
-
-    if operator == "BETWEEN" and isinstance(value, list) and len(value) == 2:
-        return (
-            f"{column_sql} BETWEEN {_quote_sql_value(value[0])} "
-            f"AND {_quote_sql_value(value[1])}"
-        )
-
-    if value is None and operator in {"=", "IS"}:
-        return f"{column_sql} IS NULL"
-    if value is None and operator in {"!=", "<>", "IS NOT"}:
-        return f"{column_sql} IS NOT NULL"
-    return f"{column_sql} {operator} {_quote_sql_value(value)}"
-
-
-def _select_to_sql(select: QuerySelect) -> str:
-    """
-    Convert a structured projection into a SQL select expression.
-
-    Args:
-        select: Structured projection request.
-
-    Returns:
-        A SQL expression for the `SELECT` clause.
-    """
-    column_sql = _qualified_column(select.column, select.table)
-    if select.aggregation:
-        return f"{select.aggregation.upper()}({column_sql})"
-    return column_sql
-
-
-def _select_alias(select: QuerySelect, index: int) -> str:
-    """
-    Return a stable output alias for a projection.
-    """
-    if select.aggregation:
-        table = select.table or "value"
-        return f"agg_{index}__{select.aggregation.lower()}__{table}__{select.column}"
-    return select.column
-
-
-def _order_to_sql(order: QueryOrder) -> str:
-    """
-    Convert a structured ordering directive into SQL.
-
-    Args:
-        order: Structured ordering request.
-
-    Returns:
-        A SQL expression for the `ORDER BY` clause.
-    """
-    column_sql = _qualified_column(order.column, order.table)
-    if order.aggregation:
-        column_sql = f"{order.aggregation.upper()}({column_sql})"
-    return f"{column_sql} {order.direction.upper()}"
-
-
-def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
-    """
-    Deterministically apply a structured QueryPlan to a base SQL query.
-
-    Assumes the base SQL is a simple SELECT ... FROM ... query generated by
-    LakePrompt's executor with joins already fixed. This function is needed
-    so the model can refine filters, grouping, and ordering without being
-    allowed to rewrite the underlying join structure.
-
-    Args:
-        sql_query: Base SQL query whose joins are already fixed.
-        plan: Structured query intent to apply to the base query.
-
-    Returns:
-        A refined SQL query that preserves the original join skeleton.
-    """
-    if not isinstance(plan, QueryPlan):
-        return sql_query
-
-    sql = sql_query.strip()
-    normalized = sql.upper()
-    from_idx = normalized.find("\nFROM ")
-    if from_idx == -1:
-        from_idx = normalized.find(" FROM ")
-    if from_idx == -1:
-        return sql_query
-
-    base_select = sql[:from_idx].strip()
-    from_clause = sql[from_idx:].strip()
-
-    select_clause = base_select
-    projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
-    if plan.projections:
-        projection_parts: list[str] = []
-        for idx, item in enumerate(plan.projections):
-            alias = _select_alias(item, idx)
-            projection_aliases[(item.table, item.column, item.aggregation)] = alias
-            projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
-        projection_sql = ", ".join(projection_parts)
-        select_clause = f"SELECT {projection_sql}"
-
-    parts = [select_clause, from_clause]
-
-    if plan.filters:
-        parts.append("WHERE " + " AND ".join(_filter_to_sql(item) for item in plan.filters))
-
-    if plan.group_by:
-        group_sql = ", ".join(
-            _qualified_column(item.split(".", 1)[1], item.split(".", 1)[0]) if "." in item else item
-            for item in plan.group_by
-        )
-        parts.append(f"GROUP BY {group_sql}")
-
-    if plan.having:
-        parts.append("HAVING " + " AND ".join(_filter_to_sql(item) for item in plan.having))
-
-    if plan.order_by:
-        order_parts: list[str] = []
-        for item in plan.order_by:
-            alias = projection_aliases.get((item.table, item.column, item.aggregation))
-            if alias:
-                order_parts.append(f"{_quote_identifier(alias)} {item.direction.upper()}")
-            else:
-                order_parts.append(_order_to_sql(item))
-        parts.append("ORDER BY " + ", ".join(order_parts))
-
-    if plan.limit is not None:
-        parts.append(f"LIMIT {plan.limit}")
-
-    return "\n".join(parts)
-
-
-def _query_plan_tables(plan: QueryPlan | None) -> set[str]:
-    """
-    Return all tables explicitly required by a structured query plan.
-    """
-    if plan is None:
-        return set()
-    tables: set[str] = set()
-    for filter_ in plan.filters + plan.having:
-        if filter_.table:
-            tables.add(filter_.table)
-    for projection in plan.projections:
-        if projection.table:
-            tables.add(projection.table)
-    for order in plan.order_by:
-        if order.table:
-            tables.add(order.table)
-    for item in plan.group_by:
-        if "." in item:
-            tables.add(item.split(".", 1)[0])
-    return tables
-
+    return " ".join(sql.split())
 
 @dataclass
 class TupleExecutor:
     """
-    Executes join paths against the DataLake and returns ranked evidence tuples.
+    Coordinate path SQL compilation, refinement, execution, and ranking.
 
-    Rows are scored individually after execution, then diversity-filtered so
-    the final evidence set is not flooded by near-duplicate rows. This
-    class is needed because join discovery only finds candidate plans; the
-    executor turns those plans into actual evidence rows the LLM can use.
+    Join discovery only produces candidate execution plans. `TupleExecutor`
+    turns those plans into real evidence rows by delegating SQL compilation
+    to `SqlBuilder`, query refinement to `QueryPlanApplier`, and row ranking
+    to `RowRanker`.
+    This class is needed because the rest of the pipeline expects one
+    execution entry point instead of managing those helper stages directly.
 
     Args:
         lake: An initialised DataLake instance.
@@ -275,29 +62,36 @@ class TupleExecutor:
         """
         Execute join paths and return the top-r most relevant evidence tuples.
 
+        This method is needed because retrieval returns candidate paths,
+        while later stages need concrete ranked evidence rows.
+
         Args:
             question: The natural language question driving retrieval.
             paths: Join paths produced by the profiler/retriever.
-            query_plan: Optional structured question intent for SQL refinement.
+            query_plan: Optional structured question intent reused across
+                path validation and SQL refinement.
             top_r: Maximum number of JoinedTuple objects to return.
 
         Returns:
             A list of at most `top_r` `JoinedTuple` objects, sorted by
             descending relevance score.
         """
-        q_emb = self._embed_question(question)
+        ranker = RowRanker(self.lake)
+        q_emb = ranker.embed_question(question)
         all_scored: list[tuple[float, dict, JoinPath]] = []
+        sql_by_path_id: dict[str, str] = {}
 
         for path in paths[:max_paths_to_execute]:
-            rows = self._execute_path(path, question=question, query_plan=query_plan)
+            rows, executed_sql = self._execute_path(path, question=question, query_plan=query_plan)
             if not rows:
                 continue
+            sql_by_path_id[path.path_id] = executed_sql
 
-            for score, row in self._score_rows(rows, q_emb, path):
+            for score, row in ranker.score_rows(rows, q_emb, path):
                 all_scored.append((score, row, path))
 
         all_scored.sort(key=lambda x: x[0], reverse=True)
-        diverse = self._select_diverse_rows(all_scored, top_r=top_r)
+        diverse = ranker.select_diverse_rows(all_scored, top_r=top_r)
         self.logger.log(
             "ranked_rows",
             "Selected ranked evidence rows.",
@@ -311,164 +105,55 @@ class TupleExecutor:
                 for score, row, path in diverse
             ],
         )
-        return self._to_joined_tuples(diverse)
+        return self._to_joined_tuples(diverse, sql_by_path_id=sql_by_path_id)
 
-    # SQL query building
-    def _build_join_sql(self, path: JoinPath, filter_clause: str = "") -> str:
-        """
-        Convert a JoinPath into a SQL SELECT ... JOIN ... ON ... string.
-
-        Duplicate column names across tables are aliased as `<table>__<col>`
-        to prevent dict key collisions. This is needed so later ranking and
-        packaging preserve table provenance in each row.
-
-        Args:
-            path: The join path to compile.
-            filter_clause: Optional SQL WHERE fragment (no 'WHERE' keyword).
-
-        Returns:
-            A complete SQL query string ready for DataLake.query().
-
-        Raises:
-            ValueError: If path.tables contains fewer than two entries.
-        """
-        tables: list[str] = path.tables
-        join_keys: list[tuple[str, str, str, str]] = path.join_keys  # (t1, col1, t2, col2)
-
-        if len(tables) < 2:
-            raise ValueError(
-                f"JoinPath must reference at least two tables, got: {tables}"
-            )
-
-        # Get (table, col, alias) triples for every column across all tables.
-        # Columns that appear in multiple tables get a disambiguating alias.
-        col_aliases = self._build_column_aliases(tables)
-
-        # Build explicit SELECT col [AS alias] items instead of SELECT *.
-        # This avoids duplicate column names in the result when two tables
-        # share a column name (e.g. both have customer_id).
-        select_parts: list[str] = []
-        for tbl, col, alias in col_aliases:
-            if alias != col:
-                select_parts.append(
-                    f"{_quote_identifier(tbl)}.{_quote_identifier(col)} AS {_quote_identifier(alias)}"
-                )
-            else:
-                select_parts.append(f"{_quote_identifier(tbl)}.{_quote_identifier(col)}")
-
-        # Start with the first (leftmost) table, then chain joins.
-        sql = f"SELECT {', '.join(select_parts)}\nFROM {_quote_identifier(tables[0])}"
-
-        for t1, col1, t2, col2 in join_keys:
-            left_join_expr = self._join_operand_sql(t1, col1)
-            right_join_expr = self._join_operand_sql(t2, col2)
-            sql += (
-                f"\nJOIN {_quote_identifier(t2)} "
-                f"ON {left_join_expr} = {right_join_expr}"
-            )
-
-        if filter_clause:
-            sql += f"\nWHERE {filter_clause}"
-
-        return sql
-
-    def _join_operand_sql(self, table_name: str, column_name: str) -> str:
-        """
-        Return a SQL expression for a join operand.
-
-        String join keys are trimmed at execution time so profiling-time
-        normalization matches actual SQL join behavior.
-        """
-        column_sql = f"{_quote_identifier(table_name)}.{_quote_identifier(column_name)}"
-        try:
-            dtype = str(self.lake.get_sample(table_name, n=1)[column_name].dtype).lower()
-        except Exception:  # noqa: BLE001
-            return column_sql
-        if "string" in dtype:
-            return f"TRIM({column_sql})"
-        return column_sql
-
-    def _build_column_aliases(
-        self, tables: list[str]
-    ) -> list[tuple[str, str, str]]:
-        """
-        Return `(table, column, alias)` triples for all columns across tables.
-
-        In multi-table joins, every column is aliased as `<table>__<column>`
-        so downstream tuple ranking sees stable table-qualified row keys.
-
-        Args:
-            tables: Ordered list of table names in the join.
-
-        Returns:
-            A list of `(table_name, column_name, alias)` tuples.
-        """
-        table_cols: dict[str, list[str]] = {}
-
-        for tbl in tables:
-            if tbl not in self.lake.tables:
-                logger.warning("Table '%s' not found in lake; skipping.", tbl)
-                table_cols[tbl] = []
-                continue
-            # Fetch a single row just to get the column names — no data needed.
-            cols = self.lake.get_sample(tbl, n=1).columns
-            table_cols[tbl] = cols
-        result: list[tuple[str, str, str]] = []
-        for tbl in tables:
-            for col in table_cols.get(tbl, []):
-                result.append((tbl, col, f"{tbl}__{col}"))
-
-        return result
-
-    # Execution of joins and retrieval of rows
     def _execute_path(
         self,
         path: JoinPath,
         question: str = "",
-        filter_clause: str = "",
         query_plan: QueryPlan | None = None,
-    ) -> list[dict]:
+    ) -> tuple[list[dict], str]:
         """
-        Build and execute SQL for a join path, returning rows as `list[dict]`.
+        Build and execute SQL for a join path, returning rows plus the
+        final executed SQL string.
 
-        If a question or `QueryPlan` is provided and no explicit
-        `filter_clause` is given, the raw join SQL is refined before
-        execution. This method is needed because join candidates only
-        become useful once they are materialized into real rows.
+        The method validates that the path can satisfy any required
+        query-plan tables, compiles base SQL, applies question-specific
+        query refinement, then executes the resulting statement.
+        This method is needed because a join path is only useful after it
+        has been materialized into actual rows.
 
         Args:
             path: The join path to execute.
-            question: Optional natural language question used to infer filters.
-            filter_clause: Optional SQL WHERE fragment. When provided, skips
-                LLM-based filter extraction and uses this clause directly.
+            question: Optional natural language question used when a
+                query plan must be inferred locally.
             query_plan: Optional structured query intent, reused instead of
                 planning again from the question.
 
         Returns:
-            A possibly empty list of row dictionaries.
+            A tuple of `(rows, normalized_sql)`. `rows` may be empty when
+            execution fails or produces no results.
         """
         if query_plan is not None:
-            required_tables = _query_plan_tables(query_plan)
+            required_tables = query_plan_tables(query_plan)
             if required_tables and not required_tables.issubset(set(path.tables)):
                 logger.warning(
                     "Skipping path %s because it does not cover required query-plan tables %s.",
                     path.tables,
                     sorted(required_tables),
                 )
-                return []
+                return [], ""
 
-        if len(path.tables) == 1:
-            where = f" WHERE {filter_clause}" if filter_clause else ""
-            sql = f"SELECT * FROM {_quote_identifier(path.tables[0])}{where}"
-        else:
-            try:
-                sql = self._build_join_sql(path, filter_clause)
-            except ValueError as exc:
-                logger.warning("Skipping malformed JoinPath: %s", exc)
-                return []
+        sql_builder = SqlBuilder(self.lake)
+        try:
+            sql = sql_builder.build_path_sql(path)
+        except ValueError as exc:
+            logger.warning("Skipping malformed JoinPath: %s", exc)
+            return [], ""
 
-        if (question or query_plan is not None) and not filter_clause:
-            sql = self._extract_filters(question, sql, path, query_plan=query_plan)
+        if question or query_plan is not None:
+            plan_applier = QueryPlanApplier(self.lake, logger=self.logger)
+            sql = plan_applier.apply(question, sql, path, query_plan=query_plan)
 
         self.logger.log("sql_query", "Executing SQL query.", {"path_id": path.path_id, "sql": sql})
 
@@ -476,373 +161,31 @@ class TupleExecutor:
             result_df = self.lake.query(sql)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Query failed for path %s: %s", path.tables, exc)
-            return []
+            return [], _normalize_sql(sql)
 
         rows = result_df.to_dicts()
 
         if not rows:
             logger.warning("Join path %s produced zero rows.", path.tables)
 
-        return rows
-
-    def _extract_filters(
-        self,
-        question: str,
-        sql: str,
-        path: JoinPath,
-        query_plan: QueryPlan | None = None,
-    ) -> str:
-        """
-        Refine a raw join SQL query with a structured query plan inferred
-        from the question.
-
-        If a `QueryPlan` is supplied, it is applied directly. Otherwise the
-        method plans from the question and involved cards first. This step
-        improves evidence quality by pushing obvious constraints down before
-        expensive join execution.
-
-        Args:
-            question: The natural language question driving retrieval.
-            sql: Raw join SQL produced by _build_join_sql.
-            path: The join path whose tables determine which cards to pass.
-
-        Returns:
-            The refined SQL string, or the original SQL if refinement fails.
-        """
-        path_table_set = set(path.tables)
-        involved_cards = [
-            card
-            for card in (getattr(self.lake, "cards", None) or [])
-            if card.table_name in path_table_set
-        ]
-
-        try:
-            plan = query_plan if query_plan is not None else plan_llm_query(question, sql, involved_cards)
-            plan = self._coerce_query_plan_types(plan, involved_cards)
-            refined_sql = apply_query_plan_to_sql(sql, plan)
-            self.logger.log(
-                "sql_refinement",
-                "Applied query plan to SQL.",
-                {"path_id": path.path_id, "query_plan": plan, "sql": refined_sql},
-            )
-            return refined_sql
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Filter extraction failed for path %s: %s", path.tables, exc
-            )
-            return sql
-
-    def _coerce_query_plan_types(
-        self,
-        plan: QueryPlan,
-        involved_cards,
-    ) -> QueryPlan:
-        """
-        Coerce filter literals to the dtypes of the referenced columns when
-        those dtypes are known from the profiled cards.
-        """
-        dtype_map = {
-            (card.table_name, card.column_name): card.dtype.lower()
-            for card in involved_cards
-        }
-        filters = [self._coerce_filter_value(item, dtype_map) for item in plan.filters]
-        having = [self._coerce_filter_value(item, dtype_map) for item in plan.having]
-        return replace(plan, filters=filters, having=having)
-
-    def _coerce_filter_value(
-        self,
-        filter_: QueryFilter,
-        dtype_map: dict[tuple[str, str], str],
-    ) -> QueryFilter:
-        """
-        Convert string filter literals into numeric/bool values when the
-        target column dtype indicates they should be typed.
-        """
-        dtype = dtype_map.get((filter_.table, filter_.column))
-        if dtype is None:
-            return filter_
-        return replace(filter_, value=self._coerce_value_to_dtype(filter_.value, dtype))
-
-    def _coerce_value_to_dtype(self, value, dtype: str):
-        if value is None:
-            return None
-        if isinstance(value, list):
-            return [self._coerce_value_to_dtype(item, dtype) for item in value]
-        if not isinstance(value, str):
-            return value
-        normalized = value.strip()
-        try:
-            if "int" in dtype:
-                return int(normalized)
-            if "float" in dtype or "double" in dtype:
-                return float(normalized)
-            if "bool" in dtype:
-                lowered = normalized.lower()
-                if lowered in {"true", "false"}:
-                    return lowered == "true"
-        except ValueError:
-            return value
-        return value
-
-    def _embed_question(self, question: str) -> "np.ndarray | None":  # type: ignore[name-defined]
-        """
-        Encode the question with SentenceTransformer and return a unit vector.
-
-        This helper is needed because tuple ranking uses semantic similarity
-        against the user question.
-
-        Args:
-            question: Natural-language question to encode.
-
-        Returns:
-            A unit-normalized embedding vector, or `None` if the embedding
-            dependency is unavailable.
-        """
-        global _ST_MODEL
-        try:
-            from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]
-        except ImportError:
-            logger.warning(
-                "sentence-transformers not installed; card-similarity ranking unavailable."
-            )
-            return None
-
-        if _ST_MODEL is None:
-            _ST_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
-
-        return _ST_MODEL.encode(question, normalize_embeddings=True)  # type: ignore[union-attr]
-
-    def _score_rows(
-        self,
-        rows: list[dict],
-        q_emb: "np.ndarray | None",  # type: ignore[name-defined]
-        path: JoinPath,
-    ) -> list[tuple[float, dict]]:
-        """
-        Score rows individually using row text similarity plus a light
-        path-coverage bonus.
-
-        This method is needed because the system should rank actual
-        evidence rows, not just the join path that produced them.
-
-        Args:
-            rows: Raw row dicts from _execute_path.
-            q_emb: Unit-vector question embedding, or None if unavailable.
-            path: The join path whose tables determine which cards to use.
-
-        Returns:
-            A list of `(score, row)` pairs sorted by descending score.
-        """
-        scored_rows: list[tuple[float, dict]] = []
-        path_table_set = set(path.tables)
-        relevant_columns = [
-            card.column_name
-            for card in (getattr(self.lake, "cards", None) or [])
-            if card.table_name in path_table_set
-        ]
-        coverage_bonus = self._path_coverage_bonus(path, relevant_columns)
-
-        for row in rows:
-            row_score = self._row_semantic_score(row, q_emb)
-            row_score += coverage_bonus
-            row_score += self._row_value_coverage_bonus(row, path)
-            scored_rows.append((row_score, row))
-
-        scored_rows.sort(key=lambda item: item[0], reverse=True)
-        return scored_rows
-
-    def _row_semantic_score(
-        self,
-        row: dict,
-        q_emb: "np.ndarray | None",  # type: ignore[name-defined]
-    ) -> float:
-        """
-        Score a row by embedding similarity against the question.
-
-        Args:
-            row: Joined row data.
-            q_emb: Precomputed question embedding.
-
-        Returns:
-            A semantic relevance score for the row.
-        """
-        if q_emb is None:
-            return 0.0
-
-        try:
-            import numpy as np
-        except ImportError:
-            return 0.0
-
-        row_text = self._row_to_text(row)
-        if not row_text.strip():
-            return 0.0
-
-        global _ST_MODEL
-        if _ST_MODEL is None:
-            return 0.0
-
-        row_emb = _ST_MODEL.encode(row_text, normalize_embeddings=True)  # type: ignore[union-attr]
-        return float(np.dot(row_emb, q_emb))
-
-    def _path_coverage_bonus(self, path: JoinPath, relevant_columns: list[str]) -> float:
-        """
-        Reward paths that cover more relevant tables and columns.
-
-        Args:
-            path: Join path that produced the row.
-            relevant_columns: Columns associated with the path's tables.
-
-        Returns:
-            A small additive bonus for broader path coverage.
-        """
-        table_bonus = 0.03 * len(path.tables)
-        column_bonus = 0.005 * len(set(relevant_columns))
-        return table_bonus + min(column_bonus, 0.05)
-
-    def _row_value_coverage_bonus(self, row: dict, path: JoinPath) -> float:
-        """
-        Reward rows that carry values from more joined tables.
-
-        Args:
-            row: Joined row data.
-            path: Path that produced the row.
-
-        Returns:
-            A small additive bonus for rows populated across more tables.
-        """
-        populated_tables = 0
-        for table in path.tables:
-            has_value = any(
-                value is not None
-                for key, value in row.items()
-                if key.startswith(f"{table}__")
-            )
-            if has_value:
-                populated_tables += 1
-
-        if len(path.tables) == 1 and row:
-            populated_tables = 1
-
-        return 0.04 * (populated_tables / max(len(path.tables), 1))
-
-    def _row_to_text(self, row: dict) -> str:
-        """
-        Convert a row into a stable table-qualified text representation.
-
-        Args:
-            row: Joined row data.
-
-        Returns:
-            A deterministic text serialization of the row for embedding.
-        """
-        parts: list[str] = []
-        for key in sorted(row):
-            value = row[key]
-            if value is None:
-                continue
-            parts.append(f"{key}={value}")
-        return " | ".join(parts)
-
-    def _select_diverse_rows(
-        self,
-        ranked: list[tuple[float, dict, JoinPath]],
-        top_r: int,
-    ) -> list[tuple[float, dict, JoinPath]]:
-        """
-        Greedily select the best rows while penalizing near-duplicates from
-        the same join path.
-
-        This method is needed because the highest-scoring rows can
-        otherwise collapse into redundant variants of the same evidence.
-
-        Args:
-            ranked: Candidate rows with scores and source paths.
-            top_r: Maximum number of rows to keep.
-
-        Returns:
-            A diversity-filtered list of ranked row triples.
-        """
-        selected: list[tuple[float, dict, JoinPath]] = []
-        selected_tokens_by_path: dict[str, list[set[str]]] = defaultdict(list)
-
-        for base_score, row, path in ranked:
-            row_tokens = self._row_token_set(row)
-            similarity_penalty = 0.0
-
-            for existing_tokens in selected_tokens_by_path[path.path_id]:
-                similarity_penalty = max(
-                    similarity_penalty,
-                    self._token_jaccard_similarity(row_tokens, existing_tokens),
-                )
-
-            adjusted_score = base_score - (0.15 * similarity_penalty)
-            if similarity_penalty >= 0.98:
-                continue
-
-            inserted = False
-            for index, (current_score, _, _) in enumerate(selected):
-                if adjusted_score > current_score:
-                    selected.insert(index, (adjusted_score, row, path))
-                    inserted = True
-                    break
-            if not inserted:
-                selected.append((adjusted_score, row, path))
-
-            selected_tokens_by_path[path.path_id].append(row_tokens)
-            if len(selected) >= top_r:
-                selected = selected[:top_r]
-
-        return selected[:top_r]
-
-    def _row_token_set(self, row: dict) -> set[str]:
-        """
-        Convert a row into a coarse token set for duplicate suppression.
-
-        Args:
-            row: Joined row data.
-
-        Returns:
-            A token set used for approximate row similarity checks.
-        """
-        tokens: set[str] = set()
-        for key, value in row.items():
-            if value is None:
-                continue
-            tokens.add(str(key).lower())
-            tokens.update(str(value).lower().split())
-        return tokens
-
-    @staticmethod
-    def _token_jaccard_similarity(left: set[str], right: set[str]) -> float:
-        """
-        Return Jaccard similarity between two token sets.
-
-        Args:
-            left: First token set.
-            right: Second token set.
-
-        Returns:
-            A similarity score between 0.0 and 1.0.
-        """
-        if not left and not right:
-            return 1.0
-        if not left or not right:
-            return 0.0
-        return len(left & right) / len(left | right)
+        return rows, _normalize_sql(sql)
 
     def _to_joined_tuples(
         self,
         ranked: list[tuple[float, dict, JoinPath]],
+        sql_by_path_id: dict[str, str],
     ) -> list[JoinedTuple]:
         """
         Wrap scored rows into `JoinedTuple` objects with sequential evidence IDs.
 
         IDs are assigned E1, E2, … in score-descending order and are stable
         within a single get_tuples() call.
+        This method is needed because downstream packaging and citation
+        logic expects evidence rows to carry IDs and provenance metadata.
 
         Args:
             ranked: List of (score, row_dict, join_path) triples.
+            sql_by_path_id: Final executed SQL keyed by source path ID.
 
         Returns:
             A list of fully populated `JoinedTuple` objects.
@@ -856,6 +199,7 @@ class TupleExecutor:
                     tables=list(path.tables),
                     join_keys=list(path.join_keys),
                     path_score=path.score,
+                    sql=sql_by_path_id.get(path.path_id, ""),
                 ),
                 join_path=path,
                 relevance_score=score,

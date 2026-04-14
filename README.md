@@ -71,7 +71,9 @@ Key package modules:
 - `lakeprompt/_ingest.py`: internal remote-source preparation and caching used by `LakePrompt.from_url(...)`
 - `lakeprompt/_profiler.py`: internal column profiling, join discovery, and join-path ranking
 - `lakeprompt/_retrieval.py`: internal semantic retrieval over `ColumnCard`s
-- `lakeprompt/_executor.py`: internal SQL generation, execution, and tuple scoring
+- `lakeprompt/_executor.py`: internal execution coordinator and tuple packaging
+- `lakeprompt/_executor_sql.py`: internal path SQL compilation and query-plan refinement
+- `lakeprompt/_executor_ranking.py`: internal row scoring and duplicate suppression
 - `lakeprompt/_packager.py`: internal evidence packaging into TOON prompts
 - `lakeprompt/_llm_utilities.py`: internal Anthropic-backed table summaries and query planning
 - `lakeprompt/_lakeprompt.py`: internal implementation module for the public `LakePrompt` class

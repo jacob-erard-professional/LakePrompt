@@ -1,0 +1,411 @@
+import logging
+from dataclasses import dataclass, replace
+
+from ._datalake import DataLake
+from ._llm_utilities import plan_llm_query
+from ._models import JoinPath, QueryFilter, QueryOrder, QueryPlan, QuerySelect
+from ._tracing import NULL_LOGGER, PipelineLogger
+
+logger = logging.getLogger(__name__)
+
+
+def _quote_identifier(identifier: str) -> str:
+    """
+    Quote a SQL identifier for Polars SQL.
+
+    This helper is needed because executor-generated SQL must be robust to
+    table and column names that require quoting.
+    """
+    escaped = identifier.replace('"', '""')
+    return f'"{escaped}"'
+
+
+def _quote_sql_value(value: object) -> str:
+    """
+    Convert a Python value into a SQL literal.
+
+    This helper is needed because structured query plans must be compiled
+    back into executable SQL deterministically.
+    """
+    if value is None:
+        return "NULL"
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, (int, float)):
+        return str(value)
+    escaped = str(value).replace("'", "''")
+    return f"'{escaped}'"
+
+
+def _qualified_column(column: str, table: str | None = None) -> str:
+    """
+    Return a stable SQL column reference.
+
+    This helper is needed because query-plan fragments may refer to either
+    bare columns or table-qualified columns.
+    """
+    if "." in column:
+        left, right = column.split(".", 1)
+        return f'{_quote_identifier(left)}.{_quote_identifier(right)}'
+    if table:
+        return f"{_quote_identifier(table)}.{_quote_identifier(column)}"
+    return _quote_identifier(column)
+
+
+def _filter_to_sql(filter_: QueryFilter) -> str:
+    """
+    Convert a structured filter into a SQL predicate.
+
+    This helper is needed because `QueryPlan` stores filters as data rather
+    than executable SQL text.
+    """
+    column_sql = _qualified_column(filter_.column, filter_.table)
+    operator = filter_.operator.upper()
+    value = filter_.value
+
+    if operator in {"IN", "NOT IN"} and isinstance(value, list):
+        values = ", ".join(_quote_sql_value(item) for item in value)
+        return f"{column_sql} {operator} ({values})"
+
+    if operator == "BETWEEN" and isinstance(value, list) and len(value) == 2:
+        return (
+            f"{column_sql} BETWEEN {_quote_sql_value(value[0])} "
+            f"AND {_quote_sql_value(value[1])}"
+        )
+
+    if value is None and operator in {"=", "IS"}:
+        return f"{column_sql} IS NULL"
+    if value is None and operator in {"!=", "<>", "IS NOT"}:
+        return f"{column_sql} IS NOT NULL"
+    return f"{column_sql} {operator} {_quote_sql_value(value)}"
+
+
+def _select_to_sql(select: QuerySelect) -> str:
+    """
+    Convert a structured projection into a SQL select expression.
+
+    This helper is needed because projections may include optional
+    aggregation and table qualification.
+    """
+    column_sql = _qualified_column(select.column, select.table)
+    if select.aggregation:
+        return f"{select.aggregation.upper()}({column_sql})"
+    return column_sql
+
+
+def _select_alias(select: QuerySelect, index: int) -> str:
+    """
+    Return a stable output alias for a projection.
+
+    This helper is needed because grouped queries and ordered projections
+    require predictable column names.
+    """
+    if select.aggregation:
+        table = select.table or "value"
+        return f"agg_{index}__{select.aggregation.lower()}__{table}__{select.column}"
+    return select.column
+
+
+def _order_to_sql(order: QueryOrder) -> str:
+    """
+    Convert a structured ordering directive into SQL.
+
+    This helper is needed because sort directives can target either raw or
+    aggregated expressions.
+    """
+    column_sql = _qualified_column(order.column, order.table)
+    if order.aggregation:
+        column_sql = f"{order.aggregation.upper()}({column_sql})"
+    return f"{column_sql} {order.direction.upper()}"
+
+
+def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
+    """
+    Deterministically apply a structured QueryPlan to a base SQL query.
+
+    This function is needed because the system wants inspectable model
+    intent without allowing free-form SQL rewrites.
+    """
+    if not isinstance(plan, QueryPlan):
+        return sql_query
+
+    sql = sql_query.strip()
+    normalized = sql.upper()
+    from_idx = normalized.find("\nFROM ")
+    if from_idx == -1:
+        from_idx = normalized.find(" FROM ")
+    if from_idx == -1:
+        return sql_query
+
+    base_select = sql[:from_idx].strip()
+    from_clause = sql[from_idx:].strip()
+
+    select_clause = base_select
+    projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
+    if plan.projections:
+        projection_parts: list[str] = []
+        for idx, item in enumerate(plan.projections):
+            alias = _select_alias(item, idx)
+            projection_aliases[(item.table, item.column, item.aggregation)] = alias
+            projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
+        projection_sql = ", ".join(projection_parts)
+        select_clause = f"SELECT {projection_sql}"
+
+    parts = [select_clause, from_clause]
+
+    if plan.filters:
+        parts.append("WHERE " + " AND ".join(_filter_to_sql(item) for item in plan.filters))
+
+    if plan.group_by:
+        group_sql = ", ".join(
+            _qualified_column(item.split(".", 1)[1], item.split(".", 1)[0]) if "." in item else item
+            for item in plan.group_by
+        )
+        parts.append(f"GROUP BY {group_sql}")
+
+    if plan.having:
+        parts.append("HAVING " + " AND ".join(_filter_to_sql(item) for item in plan.having))
+
+    if plan.order_by:
+        order_parts: list[str] = []
+        for item in plan.order_by:
+            alias = projection_aliases.get((item.table, item.column, item.aggregation))
+            if alias:
+                order_parts.append(f"{_quote_identifier(alias)} {item.direction.upper()}")
+            else:
+                order_parts.append(_order_to_sql(item))
+        parts.append("ORDER BY " + ", ".join(order_parts))
+
+    if plan.limit is not None:
+        parts.append(f"LIMIT {plan.limit}")
+
+    return "\n".join(parts)
+
+
+def query_plan_tables(plan: QueryPlan | None) -> set[str]:
+    """
+    Return all tables explicitly required by a structured query plan.
+
+    This helper is needed because the executor must skip paths that cannot
+    satisfy the tables referenced by the plan.
+    """
+    if plan is None:
+        return set()
+    tables: set[str] = set()
+    for filter_ in plan.filters + plan.having:
+        if filter_.table:
+            tables.add(filter_.table)
+    for projection in plan.projections:
+        if projection.table:
+            tables.add(projection.table)
+    for order in plan.order_by:
+        if order.table:
+            tables.add(order.table)
+    for item in plan.group_by:
+        if "." in item:
+            tables.add(item.split(".", 1)[0])
+    return tables
+
+
+@dataclass
+class SqlBuilder:
+    """
+    Compile join paths into executable base SQL.
+
+    This class is needed because join-path compilation is a separate
+    concern from query refinement, execution, and ranking.
+    """
+
+    lake: DataLake
+
+    def build_path_sql(self, path: JoinPath) -> str:
+        """
+        Convert a JoinPath into a SQL SELECT ... JOIN ... ON ... string.
+
+        The generated query includes the full join skeleton but no question-
+        specific refinement such as filtering, grouping, or ordering.
+        This method is needed because the executor must preserve the chosen
+        join structure before any question-specific refinement is applied.
+        """
+        if len(path.tables) == 1:
+            return f"SELECT * FROM {_quote_identifier(path.tables[0])}"
+
+        tables: list[str] = path.tables
+        join_keys: list[tuple[str, str, str, str]] = path.join_keys
+
+        if len(tables) < 2:
+            raise ValueError(
+                f"JoinPath must reference at least two tables, got: {tables}"
+            )
+
+        col_aliases = self._build_column_aliases(tables)
+
+        select_parts: list[str] = []
+        for tbl, col, alias in col_aliases:
+            if alias != col:
+                select_parts.append(
+                    f"{_quote_identifier(tbl)}.{_quote_identifier(col)} AS {_quote_identifier(alias)}"
+                )
+            else:
+                select_parts.append(f"{_quote_identifier(tbl)}.{_quote_identifier(col)}")
+
+        sql = f"SELECT {', '.join(select_parts)}\nFROM {_quote_identifier(tables[0])}"
+
+        for t1, col1, t2, col2 in join_keys:
+            left_join_expr = self._join_operand_sql(t1, col1)
+            right_join_expr = self._join_operand_sql(t2, col2)
+            sql += (
+                f"\nJOIN {_quote_identifier(t2)} "
+                f"ON {left_join_expr} = {right_join_expr}"
+            )
+
+        return sql
+
+    def _join_operand_sql(self, table_name: str, column_name: str) -> str:
+        """
+        Return a SQL expression for a join operand.
+
+        This helper is needed because string join keys need normalization
+        so execution matches profiling-time assumptions.
+        """
+        column_sql = f"{_quote_identifier(table_name)}.{_quote_identifier(column_name)}"
+        try:
+            dtype = str(self.lake.get_sample(table_name, n=1)[column_name].dtype).lower()
+        except Exception:  # noqa: BLE001
+            return column_sql
+        if "string" in dtype:
+            return f"TRIM({column_sql})"
+        return column_sql
+
+    def _build_column_aliases(
+        self, tables: list[str]
+    ) -> list[tuple[str, str, str]]:
+        """
+        Return `(table, column, alias)` triples for all columns across tables.
+
+        This helper is needed because joined rows need stable, non-colliding
+        output keys for downstream ranking and packaging.
+        """
+        table_cols: dict[str, list[str]] = {}
+
+        for tbl in tables:
+            if tbl not in self.lake.tables:
+                logger.warning("Table '%s' not found in lake; skipping.", tbl)
+                table_cols[tbl] = []
+                continue
+            cols = self.lake.get_sample(tbl, n=1).columns
+            table_cols[tbl] = cols
+
+        result: list[tuple[str, str, str]] = []
+        for tbl in tables:
+            for col in table_cols.get(tbl, []):
+                result.append((tbl, col, f"{tbl}__{col}"))
+
+        return result
+
+
+@dataclass
+class QueryPlanApplier:
+    """
+    Refine base path SQL using a structured QueryPlan.
+
+    This class is needed because plan coercion and SQL refinement are
+    distinct from path compilation and row ranking.
+    """
+
+    lake: DataLake
+    logger: PipelineLogger = NULL_LOGGER
+
+    def apply(
+        self,
+        question: str,
+        sql: str,
+        path: JoinPath,
+        query_plan: QueryPlan | None = None,
+    ) -> str:
+        """
+        Apply a shared or inferred query plan to a base path SQL query.
+
+        This method is needed because the question's filter, grouping,
+        projection, and ordering intent must be pushed down before execution.
+        """
+        path_table_set = set(path.tables)
+        involved_cards = [
+            card
+            for card in (getattr(self.lake, "cards", None) or [])
+            if card.table_name in path_table_set
+        ]
+
+        try:
+            plan = query_plan if query_plan is not None else plan_llm_query(question, sql, involved_cards)
+            plan = self._coerce_query_plan_types(plan, involved_cards)
+            refined_sql = apply_query_plan_to_sql(sql, plan)
+            self.logger.log(
+                "sql_refinement",
+                "Applied query plan to SQL.",
+                {"path_id": path.path_id, "query_plan": plan, "sql": refined_sql},
+            )
+            return refined_sql
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Query-plan application failed for path %s: %s", path.tables, exc
+            )
+            return sql
+
+    def _coerce_query_plan_types(
+        self,
+        plan: QueryPlan,
+        involved_cards,
+    ) -> QueryPlan:
+        """
+        Coerce query-plan predicate literals to the dtypes of the referenced
+        columns when those dtypes are known from the profiled cards.
+
+        This method is needed because LLM-produced plans often express
+        literals as strings even when the target columns are typed.
+        """
+        dtype_map = {
+            (card.table_name, card.column_name): card.dtype.lower()
+            for card in involved_cards
+        }
+        filters = [self._coerce_filter_value(item, dtype_map) for item in plan.filters]
+        having = [self._coerce_filter_value(item, dtype_map) for item in plan.having]
+        return replace(plan, filters=filters, having=having)
+
+    def _coerce_filter_value(
+        self,
+        filter_: QueryFilter,
+        dtype_map: dict[tuple[str, str], str],
+    ) -> QueryFilter:
+        """
+        Convert string filter literals into numeric/bool values when the
+        target column dtype indicates they should be typed.
+
+        This helper is needed because type coercion is performed one
+        predicate at a time.
+        """
+        dtype = dtype_map.get((filter_.table, filter_.column))
+        if dtype is None:
+            return filter_
+        return replace(filter_, value=self._coerce_value_to_dtype(filter_.value, dtype))
+
+    def _coerce_value_to_dtype(self, value, dtype: str):
+        if value is None:
+            return None
+        if isinstance(value, list):
+            return [self._coerce_value_to_dtype(item, dtype) for item in value]
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip()
+        try:
+            if "int" in dtype:
+                return int(normalized)
+            if "float" in dtype or "double" in dtype:
+                return float(normalized)
+            if "bool" in dtype:
+                lowered = normalized.lower()
+                if lowered in {"true", "false"}:
+                    return lowered == "true"
+        except ValueError:
+            return value
+        return value
