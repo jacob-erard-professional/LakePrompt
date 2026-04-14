@@ -179,7 +179,7 @@ class SpiderJoinEvaluation:
         schema_limit: int = 3,
         questions_per_schema: int = 3,
         sample_rows: int = 3,
-        lakeprompt_model: str = "nvidia/nemotron-3-super-120b-a12b:free",
+        lakeprompt_model: str = DEFAULT_CLAUDE_MODEL,
         cache_path: str | None = None,
     ) -> dict[str, Any]:
         metadata_rows = self._load_metadata()
@@ -743,7 +743,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--questions-per-schema", type=int, default=3)
     parser.add_argument("--sample-rows", type=int, default=3)
     parser.add_argument("--claude-model", default=DEFAULT_CLAUDE_MODEL)
-    parser.add_argument("--lakeprompt-model", default="nvidia/nemotron-3-super-120b-a12b:free")
+    parser.add_argument("--lakeprompt-model", default=DEFAULT_CLAUDE_MODEL)
     parser.add_argument("--cache-path", default=None)
     return parser
 
