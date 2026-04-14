@@ -14,12 +14,12 @@ A public user currently sees:
 - `lakeprompt/LLM_utilities.py`
 - `lakeprompt/datalake.py`
 - `lakeprompt/ingest.py`
-- `lakeprompt/evaluation.py`
+- `eval/evaluation.py`
 - `lakeprompt/executor.py`
 - `lakeprompt/lakeprompt.py`
 - `lakeprompt/models.py`
 - `lakeprompt/packager.py`
-- `lakeprompt/profiler.py`
+- `lakeprompt/_profiler.py`
 - `lakeprompt/retrieval.py`
 - `lakeprompt/tracing.py`
 
@@ -77,7 +77,7 @@ The public code supports:
 
 ### Evaluation scaffold
 
-The repo includes `lakeprompt/evaluation.py`, which can:
+The repo includes `eval/evaluation.py`, which can:
 
 - read Spider-style join metadata
 - generate join-requiring questions with Claude

@@ -390,7 +390,7 @@ class SpiderJoinEvaluation:
         """Condition 5: full LakePrompt pipeline with ranked evidence."""
         start = time.monotonic()
         try:
-            from .lakeprompt import LakePrompt
+            from lakeprompt import LakePrompt
 
             lp = LakePrompt(str(schema_dir), model=lakeprompt_model, cache_path=cache_path)
             result = lp.query(question)
@@ -439,7 +439,7 @@ class SpiderJoinEvaluation:
         """
         start = time.monotonic()
         try:
-            from .lakeprompt import LakePrompt
+            from lakeprompt import LakePrompt
 
             lp = LakePrompt(str(schema_dir), model=lakeprompt_model, cache_path=cache_path)
             result = lp.query(question)

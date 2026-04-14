@@ -79,7 +79,7 @@ Key package modules:
 - `lakeprompt/_lakeprompt.py`: internal implementation module for the public `LakePrompt` class
 - `lakeprompt/_models.py`: internal shared dataclasses such as `LakeAnswer`, `JoinPath`, `QueryPlan`, and `ColumnCard`
 - `lakeprompt/_tracing.py`: internal stdout tracing logger
-- `lakeprompt/evaluation.py`: evaluation runner
+- `eval/evaluation.py`: evaluation runner
 
 ## Public API
 
