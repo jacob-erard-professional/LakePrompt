@@ -1,0 +1,273 @@
+LakePrompt Evaluation Report
+Generated at: 2026-04-15T02:42:47.549512+00:00
+Dataset root: data/tables
+Metadata CSV: .
+Claude model: claude-sonnet-4-20250514
+
+=== Aggregate Metrics ===
+
+Condition: no_context
+  n: 2
+  exact_match_rate: 0.0
+  mean_token_f1: 0.0
+  mean_faithfulness: 0.0
+  mean_latency_seconds: 3.0655
+  mean_context_tokens: 0.0
+  mean_join_count: 0.0
+  error_rate: 0.0
+
+Condition: single_table
+  n: 2
+  exact_match_rate: 0.0
+  mean_token_f1: 0.0
+  mean_faithfulness: 0.0
+  mean_latency_seconds: 2.0205
+  mean_context_tokens: 47.0
+  mean_join_count: 0.0
+  error_rate: 0.0
+
+Condition: naive_multitable
+  n: 2
+  exact_match_rate: 0.0
+  mean_token_f1: 0.0
+  mean_faithfulness: 0.0
+  mean_latency_seconds: 3.474
+  mean_context_tokens: 173.0
+  mean_join_count: 0.0
+  error_rate: 0.0
+
+Condition: schema_baseline
+  n: 2
+  exact_match_rate: 0.0
+  mean_token_f1: 0.0
+  mean_faithfulness: 0.0
+  mean_latency_seconds: 4.9365
+  mean_context_tokens: 209.0
+  mean_join_count: 0.0
+  error_rate: 0.0
+
+Condition: lakeprompt_ranked
+  n: 2
+  exact_match_rate: 0.0
+  mean_token_f1: 0.0
+  mean_faithfulness: 1.0
+  mean_latency_seconds: 11.73
+  mean_context_tokens: 58.0
+  mean_join_count: 2.0
+  error_rate: 0.0
+
+Condition: join_no_ranking
+  n: 2
+  exact_match_rate: 0.0
+  mean_token_f1: 0.0
+  mean_faithfulness: 1.0
+  mean_latency_seconds: 15.555
+  mean_context_tokens: 58.0
+  mean_join_count: 2.0
+  error_rate: 0.0
+
+================================================================================
+
+Example 1
+Schema: concert_singer
+Question: Show the stadium name and the number of concerts in each stadium.
+Ground Truth: 
+
+  [no_context]
+  Answer: I don't have access to any data about stadiums or concerts in our current conversation. To answer your question about stadium names and the number of concerts in each stadium, I would need:
+
+1. A database or dataset containing information about stadiums and concerts
+2. The specific data source you'd like me to query or analyze
+
+Could you please provide the data you'd like me to work with? This could be in the form of:
+- A database connection
+- A CSV file or data table
+- Specific dataset information
+- SQL database schema details
+
+Once you share the relevant data, I'll be happy to help you find the stadium names and count the number of concerts for each one.
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 3.35s  Context Tokens: 0  Joins: 0
+  Error: [none]
+
+  [single_table]
+  Answer: Based on the provided rows, here are the stadium names and the number of concerts in each:
+
+| Stadium Name | Number of Concerts |
+|--------------|-------------------|
+| Stark's Park | 1 |
+| Somerset Park | 2 |
+
+**Explanation:**
+- Stark's Park (stadium_id 1) hosted 1 concert: "Auditions"
+- Somerset Park (stadium_id 2) hosted 2 concerts: "Super bootcamp" and "Home Visits"
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 2.159s  Context Tokens: 47  Joins: 0
+  Error: [none]
+
+  [naive_multitable]
+  Answer: Looking at the provided data, I need to count concerts by stadium using the concert table, which contains both concert information and stadium names.
+
+From the concert table:
+- "Stark's Park" (stadium_id 1): 1 concert ("Auditions")
+- "Somerset Park" (stadium_id 2): 2 concerts ("Super bootcamp" and "Home Visits")
+
+Here are the results:
+
+| Stadium Name | Number of Concerts |
+|--------------|-------------------|
+| Stark's Park | 1 |
+| Somerset Park | 2 |
+
+Note: Bayview Stadium from the stadium table has no concerts in the provided concert data, so it shows 0 concerts by omission from this result set.
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 3.715s  Context Tokens: 173  Joins: 0
+  Error: [none]
+
+  [schema_baseline]
+  Answer: Based on the schema and sample data provided, I can answer this question by joining the concert and stadium tables.
+
+From the sample data, here's what I can determine:
+
+**Stadium Name and Number of Concerts:**
+
+1. **Stark's Park**: 1 concert
+   - "Auditions" (2014)
+
+2. **Somerset Park**: 2 concerts
+   - "Super bootcamp" (2014)
+   - "Home Visits" (2015)
+
+3. **Bayview Stadium**: 0 concerts
+   - No concerts in the sample data
+
+This is based on the sample rows provided. The concert table shows concerts with their associated stadium_id, and the stadium table provides the stadium names. The query would essentially count the concerts grouped by stadium and join with the stadium table to get the stadium names.
+
+Note: This answer is based only on the sample rows provided. The complete dataset might contain additional concerts and different counts.
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 4.924s  Context Tokens: 209  Joins: 0
+  Error: [none]
+
+  [lakeprompt_ranked]
+  Answer: Recreation Park: 2 concerts, Somerset Park: 2 concerts, Glebe Park: 2 concerts, Stark's Park: 2 concerts, Balmoor: 2 concerts
+  Exact Match: False  Token F1: 0.000  Faithfulness: 1.000
+  Latency: 18.365s  Context Tokens: 58  Joins: 2
+  Error: [none]
+
+  [join_no_ranking]
+  Answer: Based on the provided evidence rows, here are the stadium names and the number of concerts in each stadium:
+
+1. **Somerset Park**: 2 concerts
+2. **Stark's Park**: 1 concert  
+3. **Glebe Park**: 1 concert
+4. **Balmoor**: 1 concert
+5. **Recreation Park**: 1 concert
+
+Note: I'm aggregating the data from the evidence rows where some stadiums appear multiple times with the same concert count (like Somerset Park in E3 and E4, both showing 2 concerts), and others appear with individual concert counts that I'm summing (like Stark's Park in E7 and E8, Glebe Park in E5 and E6, Balmoor in E9 and E10, and Recreation Park in E1 and E2).
+  Exact Match: False  Token F1: 0.000  Faithfulness: 1.000
+  Latency: 22.348s  Context Tokens: 58  Joins: 2
+  Error: [none]
+
+--------------------------------------------------------------------------------
+
+Example 2
+Schema: concert_singer
+Question: For each stadium, how many concerts play there?
+Ground Truth: 
+
+  [no_context]
+  Answer: I don't have access to any data about stadiums or concerts in our conversation. To answer your question about how many concerts play at each stadium, I would need:
+
+1. A dataset or information source that contains stadium names
+2. Concert data that shows which concerts are performed at which venues
+3. The ability to count and group concerts by stadium
+
+Could you please provide the relevant data about stadiums and concerts that you'd like me to analyze? Once you share that information, I'll be happy to help count how many concerts play at each stadium.
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 2.781s  Context Tokens: 0  Joins: 0
+  Error: [none]
+
+  [single_table]
+  Answer: Based on the provided rows, I can count the concerts for each stadium:
+
+**Stadium "Stark's Park" (stadium_id: 1):** 1 concert
+- Auditions (2014)
+
+**Stadium "Somerset Park" (stadium_id: 2):** 2 concerts
+- Super bootcamp (2014)
+- Home Visits (2015)
+
+So the answer is:
+- Stark's Park: 1 concert
+- Somerset Park: 2 concerts
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 1.882s  Context Tokens: 47  Joins: 0
+  Error: [none]
+
+  [naive_multitable]
+  Answer: Looking at the provided data, I can count the concerts for each stadium by examining the concert table, which shows the stadium_id for each concert.
+
+From the concert table:
+- Concert 1 ("Auditions") is at stadium_id 1 (Stark's Park)
+- Concert 2 ("Super bootcamp") is at stadium_id 2 (Somerset Park)  
+- Concert 3 ("Home Visits") is at stadium_id 2 (Somerset Park)
+
+Therefore, the number of concerts per stadium is:
+
+- **Stark's Park** (stadium_id 1): 1 concert
+- **Somerset Park** (stadium_id 2): 2 concerts
+- **Bayview Stadium** (stadium_id 3): 0 concerts
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 3.233s  Context Tokens: 173  Joins: 0
+  Error: [none]
+
+  [schema_baseline]
+  Answer: Looking at the schema and sample data, I can see that the `concert` table contains information about concerts and includes a `stadium_id` column that links to the `stadium` table.
+
+From the sample data provided:
+
+**Stark's Park (stadium_id: 1)**: 1 concert
+- "Auditions" (2014)
+
+**Somerset Park (stadium_id: 2)**: 2 concerts  
+- "Super bootcamp" (2014)
+- "Home Visits" (2015)
+
+**Bayview Stadium (stadium_id: 3)**: 0 concerts
+- No concerts in the sample data
+
+However, I should note that this analysis is based only on the sample rows provided. The complete answer would require querying the full dataset with:
+
+```sql
+SELECT s.name, COUNT(c.concert_id) as concert_count
+FROM stadium s
+LEFT JOIN concert c ON s.stadium_id = c.stadium_id
+GROUP BY s.stadium_id, s.name
+```
+
+The sample data gives us a partial view, but there may be additional concerts and stadiums in the complete dataset that aren't shown in these sample rows.
+  Exact Match: False  Token F1: 0.000  Faithfulness: 0.000
+  Latency: 4.949s  Context Tokens: 209  Joins: 0
+  Error: [none]
+
+  [lakeprompt_ranked]
+  Answer: Based on the evidence, each stadium hosts concerts as follows: Recreation Park (2 concerts), Somerset Park (2 concerts), Glebe Park (2 concerts), Stark's Park (2 concerts), and Balmoor (2 concerts). Each stadium appears to have exactly 2 concerts.
+  Exact Match: False  Token F1: 0.000  Faithfulness: 1.000
+  Latency: 5.095s  Context Tokens: 58  Joins: 2
+  Error: [none]
+
+  [join_no_ranking]
+  Answer: Based on the provided evidence rows, here are the number of concerts at each stadium:
+
+**Somerset Park**: 2 concerts (from E3 and E4)
+**Stark's Park**: 1 concert (from E7 and E8 - appears to be duplicate entries)
+**Recreation Park**: 1 concert (from E1 and E2 - appears to be duplicate entries)
+**Glebe Park**: 1 concert (from E5 and E6 - appears to be duplicate entries)
+**Balmoor**: 1 concert (from E9 and E10 - appears to be duplicate entries)
+
+Note: Several stadiums appear in multiple evidence rows with identical concert counts, suggesting these may be duplicate entries in the dataset rather than additional concerts.
+  Exact Match: False  Token F1: 0.000  Faithfulness: 1.000
+  Latency: 8.762s  Context Tokens: 58  Joins: 2
+  Error: [none]
+
+--------------------------------------------------------------------------------

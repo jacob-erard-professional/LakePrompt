@@ -52,6 +52,22 @@ def _qualified_column(column: str, table: str | None = None) -> str:
     return _quote_identifier(column)
 
 
+def _planned_column(column: str, table: str | None = None) -> str:
+    """
+    Return a column reference against the base path query output.
+
+    Path SQL selects stable aliases like `table__column` so downstream query
+    refinement should target those aliases rather than raw joined columns.
+    This avoids backend-specific duplicate-column naming after joins.
+    """
+    if "." in column:
+        table_name, column_name = column.split(".", 1)
+        return _quote_identifier(f"{table_name}__{column_name}")
+    if table:
+        return _quote_identifier(f"{table}__{column}")
+    return _quote_identifier(column)
+
+
 def _filter_to_sql(filter_: QueryFilter) -> str:
     """
     Convert a structured filter into a SQL predicate.
@@ -59,7 +75,7 @@ def _filter_to_sql(filter_: QueryFilter) -> str:
     This helper is needed because `QueryPlan` stores filters as data rather
     than executable SQL text.
     """
-    column_sql = _qualified_column(filter_.column, filter_.table)
+    column_sql = _planned_column(filter_.column, filter_.table)
     operator = filter_.operator.upper()
     value = filter_.value
 
@@ -87,7 +103,7 @@ def _select_to_sql(select: QuerySelect) -> str:
     This helper is needed because projections may include optional
     aggregation and table qualification.
     """
-    column_sql = _qualified_column(select.column, select.table)
+    column_sql = _planned_column(select.column, select.table)
     if select.aggregation:
         return f"{select.aggregation.upper()}({column_sql})"
     return column_sql
@@ -113,10 +129,21 @@ def _order_to_sql(order: QueryOrder) -> str:
     This helper is needed because sort directives can target either raw or
     aggregated expressions.
     """
-    column_sql = _qualified_column(order.column, order.table)
+    column_sql = _planned_column(order.column, order.table)
     if order.aggregation:
         column_sql = f"{order.aggregation.upper()}({column_sql})"
     return f"{column_sql} {order.direction.upper()}"
+
+
+def _group_item_to_sql(item: str) -> str:
+    """
+    Convert a `group_by` item into SQL.
+
+    Query plans encode group-by columns as either `table.column` or a bare
+    column name. This helper keeps the conversion logic consistent in one
+    place so grouped projections can be reconciled with the GROUP BY clause.
+    """
+    return _planned_column(item)
 
 
 def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
@@ -128,19 +155,20 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
     """
     if not isinstance(plan, QueryPlan):
         return sql_query
-
-    sql = sql_query.strip()
-    normalized = sql.upper()
-    from_idx = normalized.find("\nFROM ")
-    if from_idx == -1:
-        from_idx = normalized.find(" FROM ")
-    if from_idx == -1:
+    if not (
+        plan.projections
+        or plan.filters
+        or plan.group_by
+        or plan.having
+        or plan.order_by
+        or plan.limit is not None
+    ):
         return sql_query
 
-    base_select = sql[:from_idx].strip()
-    from_clause = sql[from_idx:].strip()
+    sql = sql_query.strip()
+    from_clause = f'FROM (\n{sql}\n) AS "__lakeprompt_base"'
 
-    select_clause = base_select
+    select_clause = "SELECT *"
     projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
     if plan.projections:
         projection_parts: list[str] = []
@@ -157,10 +185,20 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
         parts.append("WHERE " + " AND ".join(_filter_to_sql(item) for item in plan.filters))
 
     if plan.group_by:
-        group_sql = ", ".join(
-            _qualified_column(item.split(".", 1)[1], item.split(".", 1)[0]) if "." in item else item
-            for item in plan.group_by
-        )
+        group_items = list(plan.group_by)
+        for projection in plan.projections:
+            # Polars SQL is strict about grouped selects: every projected
+            # non-aggregated column must appear in GROUP BY.
+            if projection.aggregation:
+                continue
+            group_item = (
+                f"{projection.table}.{projection.column}"
+                if projection.table
+                else projection.column
+            )
+            if group_item not in group_items:
+                group_items.append(group_item)
+        group_sql = ", ".join(_group_item_to_sql(item) for item in group_items)
         parts.append(f"GROUP BY {group_sql}")
 
     if plan.having:
@@ -228,7 +266,20 @@ class SqlBuilder:
         join structure before any question-specific refinement is applied.
         """
         if len(path.tables) == 1:
-            return f"SELECT * FROM {_quote_identifier(path.tables[0])}"
+            table_name = path.tables[0]
+            col_aliases = self._build_column_aliases([table_name])
+            select_parts: list[str] = []
+            for tbl, col, alias in col_aliases:
+                if alias != col:
+                    select_parts.append(
+                        f"{_quote_identifier(tbl)}.{_quote_identifier(col)} AS {_quote_identifier(alias)}"
+                    )
+                else:
+                    select_parts.append(f"{_quote_identifier(tbl)}.{_quote_identifier(col)}")
+            return (
+                f"SELECT {', '.join(select_parts)} "
+                f"FROM {_quote_identifier(table_name)}"
+            )
 
         tables: list[str] = path.tables
         join_keys: list[tuple[str, str, str, str]] = path.join_keys

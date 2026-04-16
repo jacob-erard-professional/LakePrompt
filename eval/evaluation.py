@@ -172,6 +172,7 @@ class SpiderJoinEvaluation:
         self.output_json = Path(output_json)
         self.output_txt = Path(output_txt)
         self.claude = ClaudeClient(model=claude_model)
+        self._lakeprompt_cache: dict[tuple[str, str, str | None], Any] = {}
 
     def run(
         self,
@@ -181,78 +182,199 @@ class SpiderJoinEvaluation:
         sample_rows: int = 3,
         lakeprompt_model: str = DEFAULT_CLAUDE_MODEL,
         cache_path: str | None = None,
+        questions_file: str | None = None,
+        max_questions: int | None = None,
     ) -> dict[str, Any]:
-        metadata_rows = self._load_metadata()
-        schema_rows = self._group_metadata_by_schema(metadata_rows, schema_limit)
-
         examples: list[EvaluationExample] = []
-
-        for schema_id, rows in schema_rows.items():
-            schema_dir = self._resolve_schema_dir(schema_id)
-            schema_description = self._build_schema_description(schema_dir, sample_rows)
-            questions, ground_truths = self._generate_questions(
-                schema_id=schema_id,
-                schema_description=schema_description,
-                join_rows=rows,
-                question_count=questions_per_schema,
+        run_metadata = {
+            "dataset_root": str(self.dataset_root),
+            "metadata_csv": str(self.metadata_csv),
+            "claude_model": self.claude.model,
+        }
+        if max_questions is not None:
+            run_metadata["max_questions"] = max_questions
+        if questions_file:
+            run_metadata["questions_file"] = str(Path(questions_file))
+            self._run_from_questions_file(
+                questions_file=questions_file,
+                sample_rows=sample_rows,
+                lakeprompt_model=lakeprompt_model,
+                cache_path=cache_path,
+                examples=examples,
+                run_metadata=run_metadata,
+                max_questions=max_questions,
             )
+        else:
+            metadata_rows = self._load_metadata()
+            schema_rows = self._group_metadata_by_schema(metadata_rows, schema_limit)
 
-            for question, ground_truth in zip(questions, ground_truths):
-                example = EvaluationExample(
+            for schema_id, rows in schema_rows.items():
+                schema_dir = self._resolve_schema_dir(schema_id)
+                schema_description = self._build_schema_description(schema_dir, sample_rows)
+                questions, ground_truths = self._generate_questions(
                     schema_id=schema_id,
-                    question=question,
-                    join_metadata=rows[0],
-                    ground_truth=ground_truth,
+                    schema_description=schema_description,
+                    join_rows=rows,
+                    question_count=questions_per_schema,
                 )
 
-                # Condition 1: no context (LLM only)
-                example.conditions.append(
-                    self._run_no_context(question)
-                )
-
-                # Condition 2: single-table retrieval
-                example.conditions.append(
-                    self._run_single_table(schema_dir, schema_description, question, sample_rows)
-                )
-
-                # Condition 3: naive multi-table concatenation (no join)
-                example.conditions.append(
-                    self._run_naive_multitable(schema_dir, schema_description, question, sample_rows)
-                )
-
-                # Condition 4: schema baseline (original condition)
-                example.conditions.append(
-                    self._run_schema_baseline(schema_description, question)
-                )
-
-                # Condition 5: LakePrompt full pipeline
-                lp_result = self._run_lakeprompt(
-                    schema_dir, question, lakeprompt_model, cache_path
-                )
-                example.conditions.append(lp_result)
-
-                # Condition 6: join without ranking (shuffled evidence)
-                example.conditions.append(
-                    self._run_join_no_ranking(
-                        schema_dir, question, lakeprompt_model, cache_path
+                for question, ground_truth in zip(questions, ground_truths):
+                    if max_questions is not None and len(examples) >= max_questions:
+                        break
+                    examples.append(
+                        self._run_example(
+                            schema_id=schema_id,
+                            schema_dir=schema_dir,
+                            schema_description=schema_description,
+                            question=question,
+                            ground_truth=ground_truth,
+                            join_metadata=rows[0],
+                            sample_rows=sample_rows,
+                            lakeprompt_model=lakeprompt_model,
+                            cache_path=cache_path,
+                        )
                     )
-                )
-
-                # Compute metrics against ground truth
-                evidence_ids = self._evidence_ids_from_condition(lp_result)
-                for cond in example.conditions:
-                    cond.exact_match = _exact_match(cond.answer, ground_truth)
-                    cond.token_f1 = _token_f1(cond.answer, ground_truth)
-                    cond.faithfulness = _faithfulness_score(
-                        cond.answer, cond.cited_ids, evidence_ids
-                    )
-
-                examples.append(example)
+                    self._write_progress(examples, run_metadata)
+                if max_questions is not None and len(examples) >= max_questions:
+                    break
 
         payload = self._build_payload(examples)
         self._write_json(payload)
         self._write_txt(payload)
         return payload
+
+    def _run_from_questions_file(
+        self,
+        *,
+        questions_file: str,
+        sample_rows: int,
+        lakeprompt_model: str,
+        cache_path: str | None,
+        examples: list[EvaluationExample],
+        run_metadata: dict[str, Any],
+        max_questions: int | None,
+    ) -> None:
+        questions_path = Path(questions_file)
+        raw_items = self._load_question_items(questions_path)
+        schema_descriptions: dict[str, str] = {}
+
+        for item in raw_items:
+            if max_questions is not None and len(examples) >= max_questions:
+                break
+            schema_id = item["schema_id"]
+            schema_dir = self._resolve_schema_dir(schema_id)
+            if schema_id not in schema_descriptions:
+                schema_descriptions[schema_id] = self._build_schema_description(
+                    schema_dir, sample_rows
+                )
+            examples.append(
+                self._run_example(
+                    schema_id=schema_id,
+                    schema_dir=schema_dir,
+                    schema_description=schema_descriptions[schema_id],
+                    question=item["question"],
+                    ground_truth=item.get("ground_truth", ""),
+                    join_metadata={},
+                    sample_rows=sample_rows,
+                    lakeprompt_model=lakeprompt_model,
+                    cache_path=cache_path,
+                )
+            )
+            self._write_progress(examples, run_metadata)
+
+    def _run_example(
+        self,
+        *,
+        schema_id: str,
+        schema_dir: Path,
+        schema_description: str,
+        question: str,
+        ground_truth: str,
+        join_metadata: dict[str, Any],
+        sample_rows: int,
+        lakeprompt_model: str,
+        cache_path: str | None,
+    ) -> EvaluationExample:
+        example = EvaluationExample(
+            schema_id=schema_id,
+            question=question,
+            join_metadata=join_metadata,
+            ground_truth=ground_truth,
+        )
+
+        example.conditions.append(self._run_no_context(question))
+        example.conditions.append(
+            self._run_single_table(schema_dir, schema_description, question, sample_rows)
+        )
+        example.conditions.append(
+            self._run_naive_multitable(schema_dir, schema_description, question, sample_rows)
+        )
+        example.conditions.append(self._run_schema_baseline(schema_description, question))
+
+        lp_result, join_no_ranking_result = self._run_lakeprompt_conditions(
+            schema_dir, question, lakeprompt_model, cache_path
+        )
+        example.conditions.append(lp_result)
+        example.conditions.append(join_no_ranking_result)
+
+        evidence_ids = self._evidence_ids_from_condition(lp_result)
+        for cond in example.conditions:
+            cond.exact_match = _exact_match(cond.answer, ground_truth)
+            cond.token_f1 = _token_f1(cond.answer, ground_truth)
+            cond.faithfulness = _faithfulness_score(
+                cond.answer, cond.cited_ids, evidence_ids
+            )
+
+        return example
+
+    def _load_question_items(self, questions_path: Path) -> list[dict[str, str]]:
+        if not questions_path.exists():
+            raise FileNotFoundError(f"Questions file not found: {questions_path}")
+
+        if questions_path.suffix.lower() == ".json":
+            payload = json.loads(questions_path.read_text(encoding="utf-8"))
+            if not isinstance(payload, list):
+                raise ValueError("Questions JSON must be a list of question objects.")
+            items = payload
+        else:
+            items = []
+            for line in questions_path.read_text(encoding="utf-8").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    continue
+                parts = [part.strip() for part in stripped.split("\t")]
+                if len(parts) < 2:
+                    raise ValueError(
+                        "Questions text file must use tab-separated lines: "
+                        "<schema_id>\\t<question>[\\t<ground_truth>]"
+                    )
+                item: dict[str, str] = {
+                    "schema_id": parts[0],
+                    "question": parts[1],
+                }
+                if len(parts) > 2:
+                    item["ground_truth"] = parts[2]
+                items.append(item)
+
+        normalized: list[dict[str, str]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("Each question entry must be an object.")
+            schema_id = str(item.get("schema_id", "")).strip()
+            question = str(item.get("question", "")).strip()
+            if not schema_id or not question:
+                raise ValueError(
+                    "Each question entry must include non-empty 'schema_id' and 'question'."
+                )
+            normalized_item = {
+                "schema_id": schema_id,
+                "question": question,
+            }
+            ground_truth = str(item.get("ground_truth", "")).strip()
+            if ground_truth:
+                normalized_item["ground_truth"] = ground_truth
+            normalized.append(normalized_item)
+        return normalized
 
     def _run_no_context(self, question: str) -> ConditionResult:
         """Condition 1: LLM answers with zero context."""
@@ -380,111 +502,107 @@ class SpiderJoinEvaluation:
             error=error,
         )
 
-    def _run_lakeprompt(
+    def _get_lakeprompt(
+        self,
+        schema_dir: Path,
+        lakeprompt_model: str,
+        cache_path: str | None,
+    ):
+        from lakeprompt import LakePrompt
+
+        cache_key = (str(schema_dir.resolve()), lakeprompt_model, cache_path)
+        if cache_key not in self._lakeprompt_cache:
+            self._lakeprompt_cache[cache_key] = LakePrompt(
+                str(schema_dir),
+                model=lakeprompt_model,
+                cache_path=cache_path,
+            )
+        return self._lakeprompt_cache[cache_key]
+
+    def _run_lakeprompt_conditions(
         self,
         schema_dir: Path,
         question: str,
         lakeprompt_model: str,
         cache_path: str | None,
-    ) -> ConditionResult:
-        """Condition 5: full LakePrompt pipeline with ranked evidence."""
+    ) -> tuple[ConditionResult, ConditionResult]:
+        """Run LakePrompt once and derive both ranked and shuffled-evidence conditions."""
         start = time.monotonic()
         try:
-            from lakeprompt import LakePrompt
-
-            lp = LakePrompt(str(schema_dir), model=lakeprompt_model, cache_path=cache_path)
+            lp = self._get_lakeprompt(schema_dir, lakeprompt_model, cache_path)
             result = lp.query(question)
 
             evidence_lines = self._serialize_evidence(result.evidence)
             context_tokens = _context_token_count(evidence_lines)
             joins = _join_count(result.evidence)
-
-            prompt = self._build_lakeprompt_prompt(question, evidence_lines)
-            answer = result.text
-            cited_ids = result.cited_ids
-            error = None
-        except Exception as exc:  # noqa: BLE001
-            evidence_lines = ""
-            context_tokens = 0
-            joins = 0
-            prompt = ""
-            answer = ""
-            cited_ids = []
-            error = str(exc)
-
-        return ConditionResult(
-            condition="lakeprompt_ranked",
-            prompt=prompt,
-            answer=answer,
-            latency_seconds=round(time.monotonic() - start, 3),
-            evidence_count=len(cited_ids),
-            join_count=joins,
-            context_tokens=context_tokens,
-            cited_ids=cited_ids,
-            error=error,
-        )
-
-    def _run_join_no_ranking(
-        self,
-        schema_dir: Path,
-        question: str,
-        lakeprompt_model: str,
-        cache_path: str | None,
-    ) -> ConditionResult:
-        """
-        Condition 6: join executed but evidence order is shuffled before prompting.
-
-        This isolates the contribution of relevance ranking from the rest of
-        the pipeline.
-        """
-        start = time.monotonic()
-        try:
-            from lakeprompt import LakePrompt
-
-            lp = LakePrompt(str(schema_dir), model=lakeprompt_model, cache_path=cache_path)
-            result = lp.query(question)
+            ranked_prompt = self._build_lakeprompt_prompt(question, evidence_lines)
+            ranked_condition = ConditionResult(
+                condition="lakeprompt_ranked",
+                prompt=ranked_prompt,
+                answer=result.text,
+                latency_seconds=round(time.monotonic() - start, 3),
+                evidence_count=len(result.cited_ids),
+                join_count=joins,
+                context_tokens=context_tokens,
+                cited_ids=result.cited_ids,
+                error=None,
+            )
 
             shuffled_evidence = list(result.evidence)
             random.shuffle(shuffled_evidence)
-
-            evidence_lines = self._serialize_evidence(shuffled_evidence)
-            context_tokens = _context_token_count(evidence_lines)
-            joins = _join_count(shuffled_evidence)
-
-            prompt = self._build_lakeprompt_prompt(question, evidence_lines)
-            answer = self.claude.complete(
+            shuffled_lines = self._serialize_evidence(shuffled_evidence)
+            shuffled_tokens = _context_token_count(shuffled_lines)
+            shuffled_joins = _join_count(shuffled_evidence)
+            shuffled_prompt = self._build_lakeprompt_prompt(question, shuffled_lines)
+            shuffled_answer = self.claude.complete(
                 system=(
                     "Answer questions using only the provided evidence rows. "
                     "If the evidence is insufficient, say so explicitly."
                 ),
-                prompt=prompt,
+                prompt=shuffled_prompt,
             )
-            cited_ids = [
+            shuffled_cited_ids = [
                 item.evidence_id
                 for item in shuffled_evidence
-                if item.evidence_id in answer
+                if item.evidence_id in shuffled_answer
             ]
-            error = None
+            shuffled_condition = ConditionResult(
+                condition="join_no_ranking",
+                prompt=shuffled_prompt,
+                answer=shuffled_answer,
+                latency_seconds=round(time.monotonic() - start, 3),
+                evidence_count=len(shuffled_cited_ids),
+                join_count=shuffled_joins,
+                context_tokens=shuffled_tokens,
+                cited_ids=shuffled_cited_ids,
+                error=None,
+            )
         except Exception as exc:  # noqa: BLE001
-            evidence_lines = ""
-            context_tokens = 0
-            joins = 0
-            prompt = ""
-            answer = ""
-            cited_ids = []
-            error = str(exc)
+            elapsed = round(time.monotonic() - start, 3)
+            ranked_condition = ConditionResult(
+                condition="lakeprompt_ranked",
+                prompt="",
+                answer="",
+                latency_seconds=elapsed,
+                evidence_count=0,
+                join_count=0,
+                context_tokens=0,
+                cited_ids=[],
+                error=str(exc),
+            )
+            shuffled_condition = ConditionResult(
+                condition="join_no_ranking",
+                prompt="",
+                answer="",
+                latency_seconds=elapsed,
+                evidence_count=0,
+                join_count=0,
+                context_tokens=0,
+                cited_ids=[],
+                error=str(exc),
+            )
 
-        return ConditionResult(
-            condition="join_no_ranking",
-            prompt=prompt,
-            answer=answer,
-            latency_seconds=round(time.monotonic() - start, 3),
-            evidence_count=len(cited_ids),
-            join_count=joins,
-            context_tokens=context_tokens,
-            cited_ids=cited_ids,
-            error=error,
-        )
+        return ranked_condition, shuffled_condition
 
     def _serialize_evidence(self, evidence: list) -> str:
         return "\n".join(
@@ -649,6 +767,13 @@ class SpiderJoinEvaluation:
         )
 
     def _build_payload(self, examples: list[EvaluationExample]) -> dict[str, Any]:
+        return self._build_payload_with_metadata(examples, {})
+
+    def _build_payload_with_metadata(
+        self,
+        examples: list[EvaluationExample],
+        extra_metadata: dict[str, Any],
+    ) -> dict[str, Any]:
         serialized_examples = []
         for ex in examples:
             serialized_examples.append({
@@ -683,9 +808,19 @@ class SpiderJoinEvaluation:
             "dataset_root": str(self.dataset_root),
             "metadata_csv": str(self.metadata_csv),
             "claude_model": self.claude.model,
+            **extra_metadata,
             "aggregate_metrics": aggregate,
             "examples": serialized_examples,
         }
+
+    def _write_progress(
+        self,
+        examples: list[EvaluationExample],
+        run_metadata: dict[str, Any],
+    ) -> None:
+        payload = self._build_payload_with_metadata(examples, run_metadata)
+        self._write_json(payload)
+        self._write_txt(payload)
 
     def _write_json(self, payload: dict[str, Any]) -> None:
         self.output_json.parent.mkdir(parents=True, exist_ok=True)
@@ -736,12 +871,14 @@ class SpiderJoinEvaluation:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run Spider join evaluation for LakePrompt.")
     parser.add_argument("--dataset-root", required=True)
-    parser.add_argument("--metadata-csv", required=True)
+    parser.add_argument("--metadata-csv", default=None)
+    parser.add_argument("--questions-file", default=None)
     parser.add_argument("--output-json", required=True)
     parser.add_argument("--output-txt", required=True)
     parser.add_argument("--schema-limit", type=int, default=3)
     parser.add_argument("--questions-per-schema", type=int, default=3)
     parser.add_argument("--sample-rows", type=int, default=3)
+    parser.add_argument("--max-questions", type=int, default=None)
     parser.add_argument("--claude-model", default=DEFAULT_CLAUDE_MODEL)
     parser.add_argument("--lakeprompt-model", default=DEFAULT_CLAUDE_MODEL)
     parser.add_argument("--cache-path", default=None)
@@ -750,9 +887,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_arg_parser().parse_args()
+    if not args.questions_file and not args.metadata_csv:
+        raise ValueError("Provide either --questions-file or --metadata-csv.")
+    if args.questions_file and args.metadata_csv:
+        raise ValueError("Provide only one of --questions-file or --metadata-csv.")
     runner = SpiderJoinEvaluation(
         dataset_root=args.dataset_root,
-        metadata_csv=args.metadata_csv,
+        metadata_csv=args.metadata_csv or "",
         output_json=args.output_json,
         output_txt=args.output_txt,
         claude_model=args.claude_model,
@@ -763,6 +904,8 @@ def main() -> None:
         sample_rows=args.sample_rows,
         lakeprompt_model=args.lakeprompt_model,
         cache_path=args.cache_path,
+        questions_file=args.questions_file,
+        max_questions=args.max_questions,
     )
 
 

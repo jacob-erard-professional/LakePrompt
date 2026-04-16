@@ -1,0 +1,298 @@
+{
+  "generated_at": "2026-04-15T02:42:47.549512+00:00",
+  "dataset_root": "data/tables",
+  "metadata_csv": ".",
+  "claude_model": "claude-sonnet-4-20250514",
+  "aggregate_metrics": {
+    "no_context": {
+      "n": 2,
+      "exact_match_rate": 0.0,
+      "mean_token_f1": 0.0,
+      "mean_faithfulness": 0.0,
+      "mean_latency_seconds": 3.0655,
+      "mean_context_tokens": 0.0,
+      "mean_join_count": 0.0,
+      "error_rate": 0.0
+    },
+    "single_table": {
+      "n": 2,
+      "exact_match_rate": 0.0,
+      "mean_token_f1": 0.0,
+      "mean_faithfulness": 0.0,
+      "mean_latency_seconds": 2.0205,
+      "mean_context_tokens": 47.0,
+      "mean_join_count": 0.0,
+      "error_rate": 0.0
+    },
+    "naive_multitable": {
+      "n": 2,
+      "exact_match_rate": 0.0,
+      "mean_token_f1": 0.0,
+      "mean_faithfulness": 0.0,
+      "mean_latency_seconds": 3.474,
+      "mean_context_tokens": 173.0,
+      "mean_join_count": 0.0,
+      "error_rate": 0.0
+    },
+    "schema_baseline": {
+      "n": 2,
+      "exact_match_rate": 0.0,
+      "mean_token_f1": 0.0,
+      "mean_faithfulness": 0.0,
+      "mean_latency_seconds": 4.9365,
+      "mean_context_tokens": 209.0,
+      "mean_join_count": 0.0,
+      "error_rate": 0.0
+    },
+    "lakeprompt_ranked": {
+      "n": 2,
+      "exact_match_rate": 0.0,
+      "mean_token_f1": 0.0,
+      "mean_faithfulness": 1.0,
+      "mean_latency_seconds": 11.73,
+      "mean_context_tokens": 58.0,
+      "mean_join_count": 2.0,
+      "error_rate": 0.0
+    },
+    "join_no_ranking": {
+      "n": 2,
+      "exact_match_rate": 0.0,
+      "mean_token_f1": 0.0,
+      "mean_faithfulness": 1.0,
+      "mean_latency_seconds": 15.555,
+      "mean_context_tokens": 58.0,
+      "mean_join_count": 2.0,
+      "error_rate": 0.0
+    }
+  },
+  "examples": [
+    {
+      "schema_id": "concert_singer",
+      "question": "Show the stadium name and the number of concerts in each stadium.",
+      "ground_truth": "",
+      "join_metadata": {},
+      "conditions": [
+        {
+          "condition": "no_context",
+          "prompt": "Answer the following question as best you can.\n\nQuestion:\nShow the stadium name and the number of concerts in each stadium.",
+          "answer": "I don't have access to any data about stadiums or concerts in our current conversation. To answer your question about stadium names and the number of concerts in each stadium, I would need:\n\n1. A database or dataset containing information about stadiums and concerts\n2. The specific data source you'd like me to query or analyze\n\nCould you please provide the data you'd like me to work with? This could be in the form of:\n- A database connection\n- A CSV file or data table\n- Specific dataset information\n- SQL database schema details\n\nOnce you share the relevant data, I'll be happy to help you find the stadium names and count the number of concerts for each one.",
+          "latency_seconds": 3.35,
+          "evidence_count": 0,
+          "join_count": 0,
+          "context_tokens": 0,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "single_table",
+          "prompt": "Use only the following rows from a single table to answer the question.\n\nRows:\nTable: concert\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Stark's Park\", \"stadium_id\": 1, \"theme\": \"Free choice\", \"year\": 2014}\n{\"concert_id\": 2, \"concert_name\": \"Super bootcamp\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Free choice 2\", \"year\": 2014}\n{\"concert_id\": 3, \"concert_name\": \"Home Visits\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Bleeding Love\", \"year\": 2015}\n\nQuestion:\nShow the stadium name and the number of concerts in each stadium.",
+          "answer": "Based on the provided rows, here are the stadium names and the number of concerts in each:\n\n| Stadium Name | Number of Concerts |\n|--------------|-------------------|\n| Stark's Park | 1 |\n| Somerset Park | 2 |\n\n**Explanation:**\n- Stark's Park (stadium_id 1) hosted 1 concert: \"Auditions\"\n- Somerset Park (stadium_id 2) hosted 2 concerts: \"Super bootcamp\" and \"Home Visits\"",
+          "latency_seconds": 2.159,
+          "evidence_count": 3,
+          "join_count": 0,
+          "context_tokens": 47,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "naive_multitable",
+          "prompt": "Use only the following rows from multiple tables to answer the question. Tables are not joined.\n\nRows:\nTable: concert\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Stark's Park\", \"stadium_id\": 1, \"theme\": \"Free choice\", \"year\": 2014}\n{\"concert_id\": 2, \"concert_name\": \"Super bootcamp\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Free choice 2\", \"year\": 2014}\n{\"concert_id\": 3, \"concert_name\": \"Home Visits\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Bleeding Love\", \"year\": 2015}\n\nTable: singer\n{\"age\": 52, \"country\": \"Netherlands\", \"is_male\": \"F\", \"name\": \"Joe Sharp\", \"singer_id\": 1, \"song_name\": \"You\", \"song_release_year\": 1992}\n{\"age\": 32, \"country\": \"United States\", \"is_male\": \"T\", \"name\": \"Timbaland\", \"singer_id\": 2, \"song_name\": \"Dangerous\", \"song_release_year\": 2008}\n{\"age\": 29, \"country\": \"France\", \"is_male\": \"T\", \"name\": \"Justin Brown\", \"singer_id\": 3, \"song_name\": \"Hey Oh\", \"song_release_year\": 2013}\n\nTable: singer_in_concert\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Timbaland\", \"singer_id\": 2}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Justin Brown\", \"singer_id\": 3}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"John Nizinik\", \"singer_id\": 5}\n\nTable: stadium\n{\"average\": 2106, \"capacity\": 10104, \"highest\": 4812, \"location\": \"Raith Rovers\", \"lowest\": 1294, \"name\": \"Stark's Park\", \"stadium_id\": 1}\n{\"average\": 1477, \"capacity\": 11998, \"highest\": 2363, \"location\": \"Ayr United\", \"lowest\": 1057, \"name\": \"Somerset Park\", \"stadium_id\": 2}\n{\"average\": 864, \"capacity\": 2000, \"highest\": 1980, \"location\": \"East Fife\", \"lowest\": 533, \"name\": \"Bayview Stadium\", \"stadium_id\": 3}\n\nQuestion:\nShow the stadium name and the number of concerts in each stadium.",
+          "answer": "Looking at the provided data, I need to count concerts by stadium using the concert table, which contains both concert information and stadium names.\n\nFrom the concert table:\n- \"Stark's Park\" (stadium_id 1): 1 concert (\"Auditions\")\n- \"Somerset Park\" (stadium_id 2): 2 concerts (\"Super bootcamp\" and \"Home Visits\")\n\nHere are the results:\n\n| Stadium Name | Number of Concerts |\n|--------------|-------------------|\n| Stark's Park | 1 |\n| Somerset Park | 2 |\n\nNote: Bayview Stadium from the stadium table has no concerts in the provided concert data, so it shows 0 concerts by omission from this result set.",
+          "latency_seconds": 3.715,
+          "evidence_count": 3,
+          "join_count": 0,
+          "context_tokens": 173,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "schema_baseline",
+          "prompt": "Use the following schema and sample rows to answer the question.\nIf you cannot answer confidently from this information alone, say so.\n\nSchema:\nTable: concert\nColumns: concert_id, concert_name, theme, stadium_id, year, name\nSample rows:\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Stark's Park\", \"stadium_id\": 1, \"theme\": \"Free choice\", \"year\": 2014}\n{\"concert_id\": 2, \"concert_name\": \"Super bootcamp\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Free choice 2\", \"year\": 2014}\n{\"concert_id\": 3, \"concert_name\": \"Home Visits\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Bleeding Love\", \"year\": 2015}\n\nTable: singer\nColumns: singer_id, name, country, song_name, song_release_year, age, is_male\nSample rows:\n{\"age\": 52, \"country\": \"Netherlands\", \"is_male\": \"F\", \"name\": \"Joe Sharp\", \"singer_id\": 1, \"song_name\": \"You\", \"song_release_year\": 1992}\n{\"age\": 32, \"country\": \"United States\", \"is_male\": \"T\", \"name\": \"Timbaland\", \"singer_id\": 2, \"song_name\": \"Dangerous\", \"song_release_year\": 2008}\n{\"age\": 29, \"country\": \"France\", \"is_male\": \"T\", \"name\": \"Justin Brown\", \"singer_id\": 3, \"song_name\": \"Hey Oh\", \"song_release_year\": 2013}\n\nTable: singer_in_concert\nColumns: concert_id, singer_id, concert_name, name\nSample rows:\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Timbaland\", \"singer_id\": 2}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Justin Brown\", \"singer_id\": 3}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"John Nizinik\", \"singer_id\": 5}\n\nTable: stadium\nColumns: stadium_id, location, name, capacity, highest, lowest, average\nSample rows:\n{\"average\": 2106, \"capacity\": 10104, \"highest\": 4812, \"location\": \"Raith Rovers\", \"lowest\": 1294, \"name\": \"Stark's Park\", \"stadium_id\": 1}\n{\"average\": 1477, \"capacity\": 11998, \"highest\": 2363, \"location\": \"Ayr United\", \"lowest\": 1057, \"name\": \"Somerset Park\", \"stadium_id\": 2}\n{\"average\": 864, \"capacity\": 2000, \"highest\": 1980, \"location\": \"East Fife\", \"lowest\": 533, \"name\": \"Bayview Stadium\", \"stadium_id\": 3}\n\nQuestion:\nShow the stadium name and the number of concerts in each stadium.",
+          "answer": "Based on the schema and sample data provided, I can answer this question by joining the concert and stadium tables.\n\nFrom the sample data, here's what I can determine:\n\n**Stadium Name and Number of Concerts:**\n\n1. **Stark's Park**: 1 concert\n   - \"Auditions\" (2014)\n\n2. **Somerset Park**: 2 concerts\n   - \"Super bootcamp\" (2014)\n   - \"Home Visits\" (2015)\n\n3. **Bayview Stadium**: 0 concerts\n   - No concerts in the sample data\n\nThis is based on the sample rows provided. The concert table shows concerts with their associated stadium_id, and the stadium table provides the stadium names. The query would essentially count the concerts grouped by stadium and join with the stadium table to get the stadium names.\n\nNote: This answer is based only on the sample rows provided. The complete dataset might contain additional concerts and different counts.",
+          "latency_seconds": 4.924,
+          "evidence_count": 0,
+          "join_count": 0,
+          "context_tokens": 209,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "lakeprompt_ranked",
+          "prompt": "Use only the following LakePrompt evidence rows to answer the question.\nIf the evidence is insufficient, say so.\n\nEvidence:\nE1: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Recreation Park\"}\nE2: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Recreation Park\"}\nE3: {\"agg_1__count__concert__concert_id\": 2, \"name\": \"Somerset Park\"}\nE4: {\"agg_1__count__concert__concert_id\": 2, \"name\": \"Somerset Park\"}\nE5: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Glebe Park\"}\nE6: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Glebe Park\"}\nE7: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Stark's Park\"}\nE8: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Stark's Park\"}\nE9: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Balmoor\"}\nE10: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Balmoor\"}\n\nQuestion:\nShow the stadium name and the number of concerts in each stadium.",
+          "answer": "Recreation Park: 2 concerts, Somerset Park: 2 concerts, Glebe Park: 2 concerts, Stark's Park: 2 concerts, Balmoor: 2 concerts",
+          "latency_seconds": 18.365,
+          "evidence_count": 10,
+          "join_count": 2,
+          "context_tokens": 58,
+          "cited_ids": [
+            "E1",
+            "E2",
+            "E3",
+            "E4",
+            "E5",
+            "E6",
+            "E7",
+            "E8",
+            "E9",
+            "E10"
+          ],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 1.0
+        },
+        {
+          "condition": "join_no_ranking",
+          "prompt": "Use only the following LakePrompt evidence rows to answer the question.\nIf the evidence is insufficient, say so.\n\nEvidence:\nE8: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Stark's Park\"}\nE6: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Glebe Park\"}\nE7: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Stark's Park\"}\nE10: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Balmoor\"}\nE3: {\"agg_1__count__concert__concert_id\": 2, \"name\": \"Somerset Park\"}\nE4: {\"agg_1__count__concert__concert_id\": 2, \"name\": \"Somerset Park\"}\nE9: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Balmoor\"}\nE1: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Recreation Park\"}\nE5: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Glebe Park\"}\nE2: {\"agg_1__count__concert__concert_id\": 1, \"name\": \"Recreation Park\"}\n\nQuestion:\nShow the stadium name and the number of concerts in each stadium.",
+          "answer": "Based on the provided evidence rows, here are the stadium names and the number of concerts in each stadium:\n\n1. **Somerset Park**: 2 concerts\n2. **Stark's Park**: 1 concert  \n3. **Glebe Park**: 1 concert\n4. **Balmoor**: 1 concert\n5. **Recreation Park**: 1 concert\n\nNote: I'm aggregating the data from the evidence rows where some stadiums appear multiple times with the same concert count (like Somerset Park in E3 and E4, both showing 2 concerts), and others appear with individual concert counts that I'm summing (like Stark's Park in E7 and E8, Glebe Park in E5 and E6, Balmoor in E9 and E10, and Recreation Park in E1 and E2).",
+          "latency_seconds": 22.348,
+          "evidence_count": 10,
+          "join_count": 2,
+          "context_tokens": 58,
+          "cited_ids": [
+            "E8",
+            "E6",
+            "E7",
+            "E10",
+            "E3",
+            "E4",
+            "E9",
+            "E1",
+            "E5",
+            "E2"
+          ],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 1.0
+        }
+      ]
+    },
+    {
+      "schema_id": "concert_singer",
+      "question": "For each stadium, how many concerts play there?",
+      "ground_truth": "",
+      "join_metadata": {},
+      "conditions": [
+        {
+          "condition": "no_context",
+          "prompt": "Answer the following question as best you can.\n\nQuestion:\nFor each stadium, how many concerts play there?",
+          "answer": "I don't have access to any data about stadiums or concerts in our conversation. To answer your question about how many concerts play at each stadium, I would need:\n\n1. A dataset or information source that contains stadium names\n2. Concert data that shows which concerts are performed at which venues\n3. The ability to count and group concerts by stadium\n\nCould you please provide the relevant data about stadiums and concerts that you'd like me to analyze? Once you share that information, I'll be happy to help count how many concerts play at each stadium.",
+          "latency_seconds": 2.781,
+          "evidence_count": 0,
+          "join_count": 0,
+          "context_tokens": 0,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "single_table",
+          "prompt": "Use only the following rows from a single table to answer the question.\n\nRows:\nTable: concert\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Stark's Park\", \"stadium_id\": 1, \"theme\": \"Free choice\", \"year\": 2014}\n{\"concert_id\": 2, \"concert_name\": \"Super bootcamp\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Free choice 2\", \"year\": 2014}\n{\"concert_id\": 3, \"concert_name\": \"Home Visits\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Bleeding Love\", \"year\": 2015}\n\nQuestion:\nFor each stadium, how many concerts play there?",
+          "answer": "Based on the provided rows, I can count the concerts for each stadium:\n\n**Stadium \"Stark's Park\" (stadium_id: 1):** 1 concert\n- Auditions (2014)\n\n**Stadium \"Somerset Park\" (stadium_id: 2):** 2 concerts\n- Super bootcamp (2014)\n- Home Visits (2015)\n\nSo the answer is:\n- Stark's Park: 1 concert\n- Somerset Park: 2 concerts",
+          "latency_seconds": 1.882,
+          "evidence_count": 3,
+          "join_count": 0,
+          "context_tokens": 47,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "naive_multitable",
+          "prompt": "Use only the following rows from multiple tables to answer the question. Tables are not joined.\n\nRows:\nTable: concert\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Stark's Park\", \"stadium_id\": 1, \"theme\": \"Free choice\", \"year\": 2014}\n{\"concert_id\": 2, \"concert_name\": \"Super bootcamp\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Free choice 2\", \"year\": 2014}\n{\"concert_id\": 3, \"concert_name\": \"Home Visits\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Bleeding Love\", \"year\": 2015}\n\nTable: singer\n{\"age\": 52, \"country\": \"Netherlands\", \"is_male\": \"F\", \"name\": \"Joe Sharp\", \"singer_id\": 1, \"song_name\": \"You\", \"song_release_year\": 1992}\n{\"age\": 32, \"country\": \"United States\", \"is_male\": \"T\", \"name\": \"Timbaland\", \"singer_id\": 2, \"song_name\": \"Dangerous\", \"song_release_year\": 2008}\n{\"age\": 29, \"country\": \"France\", \"is_male\": \"T\", \"name\": \"Justin Brown\", \"singer_id\": 3, \"song_name\": \"Hey Oh\", \"song_release_year\": 2013}\n\nTable: singer_in_concert\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Timbaland\", \"singer_id\": 2}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Justin Brown\", \"singer_id\": 3}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"John Nizinik\", \"singer_id\": 5}\n\nTable: stadium\n{\"average\": 2106, \"capacity\": 10104, \"highest\": 4812, \"location\": \"Raith Rovers\", \"lowest\": 1294, \"name\": \"Stark's Park\", \"stadium_id\": 1}\n{\"average\": 1477, \"capacity\": 11998, \"highest\": 2363, \"location\": \"Ayr United\", \"lowest\": 1057, \"name\": \"Somerset Park\", \"stadium_id\": 2}\n{\"average\": 864, \"capacity\": 2000, \"highest\": 1980, \"location\": \"East Fife\", \"lowest\": 533, \"name\": \"Bayview Stadium\", \"stadium_id\": 3}\n\nQuestion:\nFor each stadium, how many concerts play there?",
+          "answer": "Looking at the provided data, I can count the concerts for each stadium by examining the concert table, which shows the stadium_id for each concert.\n\nFrom the concert table:\n- Concert 1 (\"Auditions\") is at stadium_id 1 (Stark's Park)\n- Concert 2 (\"Super bootcamp\") is at stadium_id 2 (Somerset Park)  \n- Concert 3 (\"Home Visits\") is at stadium_id 2 (Somerset Park)\n\nTherefore, the number of concerts per stadium is:\n\n- **Stark's Park** (stadium_id 1): 1 concert\n- **Somerset Park** (stadium_id 2): 2 concerts\n- **Bayview Stadium** (stadium_id 3): 0 concerts",
+          "latency_seconds": 3.233,
+          "evidence_count": 3,
+          "join_count": 0,
+          "context_tokens": 173,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "schema_baseline",
+          "prompt": "Use the following schema and sample rows to answer the question.\nIf you cannot answer confidently from this information alone, say so.\n\nSchema:\nTable: concert\nColumns: concert_id, concert_name, theme, stadium_id, year, name\nSample rows:\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Stark's Park\", \"stadium_id\": 1, \"theme\": \"Free choice\", \"year\": 2014}\n{\"concert_id\": 2, \"concert_name\": \"Super bootcamp\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Free choice 2\", \"year\": 2014}\n{\"concert_id\": 3, \"concert_name\": \"Home Visits\", \"name\": \"Somerset Park\", \"stadium_id\": 2, \"theme\": \"Bleeding Love\", \"year\": 2015}\n\nTable: singer\nColumns: singer_id, name, country, song_name, song_release_year, age, is_male\nSample rows:\n{\"age\": 52, \"country\": \"Netherlands\", \"is_male\": \"F\", \"name\": \"Joe Sharp\", \"singer_id\": 1, \"song_name\": \"You\", \"song_release_year\": 1992}\n{\"age\": 32, \"country\": \"United States\", \"is_male\": \"T\", \"name\": \"Timbaland\", \"singer_id\": 2, \"song_name\": \"Dangerous\", \"song_release_year\": 2008}\n{\"age\": 29, \"country\": \"France\", \"is_male\": \"T\", \"name\": \"Justin Brown\", \"singer_id\": 3, \"song_name\": \"Hey Oh\", \"song_release_year\": 2013}\n\nTable: singer_in_concert\nColumns: concert_id, singer_id, concert_name, name\nSample rows:\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Timbaland\", \"singer_id\": 2}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"Justin Brown\", \"singer_id\": 3}\n{\"concert_id\": 1, \"concert_name\": \"Auditions\", \"name\": \"John Nizinik\", \"singer_id\": 5}\n\nTable: stadium\nColumns: stadium_id, location, name, capacity, highest, lowest, average\nSample rows:\n{\"average\": 2106, \"capacity\": 10104, \"highest\": 4812, \"location\": \"Raith Rovers\", \"lowest\": 1294, \"name\": \"Stark's Park\", \"stadium_id\": 1}\n{\"average\": 1477, \"capacity\": 11998, \"highest\": 2363, \"location\": \"Ayr United\", \"lowest\": 1057, \"name\": \"Somerset Park\", \"stadium_id\": 2}\n{\"average\": 864, \"capacity\": 2000, \"highest\": 1980, \"location\": \"East Fife\", \"lowest\": 533, \"name\": \"Bayview Stadium\", \"stadium_id\": 3}\n\nQuestion:\nFor each stadium, how many concerts play there?",
+          "answer": "Looking at the schema and sample data, I can see that the `concert` table contains information about concerts and includes a `stadium_id` column that links to the `stadium` table.\n\nFrom the sample data provided:\n\n**Stark's Park (stadium_id: 1)**: 1 concert\n- \"Auditions\" (2014)\n\n**Somerset Park (stadium_id: 2)**: 2 concerts  \n- \"Super bootcamp\" (2014)\n- \"Home Visits\" (2015)\n\n**Bayview Stadium (stadium_id: 3)**: 0 concerts\n- No concerts in the sample data\n\nHowever, I should note that this analysis is based only on the sample rows provided. The complete answer would require querying the full dataset with:\n\n```sql\nSELECT s.name, COUNT(c.concert_id) as concert_count\nFROM stadium s\nLEFT JOIN concert c ON s.stadium_id = c.stadium_id\nGROUP BY s.stadium_id, s.name\n```\n\nThe sample data gives us a partial view, but there may be additional concerts and stadiums in the complete dataset that aren't shown in these sample rows.",
+          "latency_seconds": 4.949,
+          "evidence_count": 0,
+          "join_count": 0,
+          "context_tokens": 209,
+          "cited_ids": [],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 0.0
+        },
+        {
+          "condition": "lakeprompt_ranked",
+          "prompt": "Use only the following LakePrompt evidence rows to answer the question.\nIf the evidence is insufficient, say so.\n\nEvidence:\nE1: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Recreation Park\"}\nE2: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Recreation Park\"}\nE3: {\"agg_1__count__concert__stadium_id\": 2, \"name\": \"Somerset Park\"}\nE4: {\"agg_1__count__concert__stadium_id\": 2, \"name\": \"Somerset Park\"}\nE5: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Glebe Park\"}\nE6: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Glebe Park\"}\nE7: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Stark's Park\"}\nE8: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Stark's Park\"}\nE9: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Balmoor\"}\nE10: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Balmoor\"}\n\nQuestion:\nFor each stadium, how many concerts play there?",
+          "answer": "Based on the evidence, each stadium hosts concerts as follows: Recreation Park (2 concerts), Somerset Park (2 concerts), Glebe Park (2 concerts), Stark's Park (2 concerts), and Balmoor (2 concerts). Each stadium appears to have exactly 2 concerts.",
+          "latency_seconds": 5.095,
+          "evidence_count": 10,
+          "join_count": 2,
+          "context_tokens": 58,
+          "cited_ids": [
+            "E1",
+            "E2",
+            "E3",
+            "E4",
+            "E5",
+            "E6",
+            "E7",
+            "E8",
+            "E9",
+            "E10"
+          ],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 1.0
+        },
+        {
+          "condition": "join_no_ranking",
+          "prompt": "Use only the following LakePrompt evidence rows to answer the question.\nIf the evidence is insufficient, say so.\n\nEvidence:\nE8: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Stark's Park\"}\nE7: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Stark's Park\"}\nE9: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Balmoor\"}\nE3: {\"agg_1__count__concert__stadium_id\": 2, \"name\": \"Somerset Park\"}\nE2: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Recreation Park\"}\nE1: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Recreation Park\"}\nE6: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Glebe Park\"}\nE10: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Balmoor\"}\nE5: {\"agg_1__count__concert__stadium_id\": 1, \"name\": \"Glebe Park\"}\nE4: {\"agg_1__count__concert__stadium_id\": 2, \"name\": \"Somerset Park\"}\n\nQuestion:\nFor each stadium, how many concerts play there?",
+          "answer": "Based on the provided evidence rows, here are the number of concerts at each stadium:\n\n**Somerset Park**: 2 concerts (from E3 and E4)\n**Stark's Park**: 1 concert (from E7 and E8 - appears to be duplicate entries)\n**Recreation Park**: 1 concert (from E1 and E2 - appears to be duplicate entries)\n**Glebe Park**: 1 concert (from E5 and E6 - appears to be duplicate entries)\n**Balmoor**: 1 concert (from E9 and E10 - appears to be duplicate entries)\n\nNote: Several stadiums appear in multiple evidence rows with identical concert counts, suggesting these may be duplicate entries in the dataset rather than additional concerts.",
+          "latency_seconds": 8.762,
+          "evidence_count": 10,
+          "join_count": 2,
+          "context_tokens": 58,
+          "cited_ids": [
+            "E8",
+            "E7",
+            "E9",
+            "E3",
+            "E2",
+            "E1",
+            "E6",
+            "E10",
+            "E5",
+            "E4"
+          ],
+          "error": null,
+          "exact_match": false,
+          "token_f1": 0.0,
+          "faithfulness": 1.0
+        }
+      ]
+    }
+  ]
+}
