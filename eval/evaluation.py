@@ -104,7 +104,8 @@ class ConditionResult:
     latency_seconds: float
     evidence_count: int
     join_count: int
-    context_tokens: int
+    context_tokens: int  # whitespace-token count of serialized evidence lines only
+    prompt_tokens: int = 0  # whitespace-token count of the full prompt sent to the LLM
     cited_ids: list[str] = field(default_factory=list)
     error: str | None = None
     # Filled in after ground truth is available
@@ -397,6 +398,7 @@ class SpiderJoinEvaluation:
             evidence_count=0,
             join_count=0,
             context_tokens=0,
+            prompt_tokens=_context_token_count(prompt),
             error=error,
         )
 
@@ -437,6 +439,7 @@ class SpiderJoinEvaluation:
             evidence_count=sample_rows,
             join_count=0,
             context_tokens=context_tokens,
+            prompt_tokens=_context_token_count(prompt),
             error=error,
         )
 
@@ -474,6 +477,7 @@ class SpiderJoinEvaluation:
             evidence_count=sample_rows,
             join_count=0,
             context_tokens=context_tokens,
+            prompt_tokens=_context_token_count(prompt),
             error=error,
         )
 
@@ -499,6 +503,7 @@ class SpiderJoinEvaluation:
             evidence_count=0,
             join_count=0,
             context_tokens=context_tokens,
+            prompt_tokens=_context_token_count(prompt),
             error=error,
         )
 
@@ -541,9 +546,10 @@ class SpiderJoinEvaluation:
                 prompt=ranked_prompt,
                 answer=result.text,
                 latency_seconds=round(time.monotonic() - start, 3),
-                evidence_count=len(result.cited_ids),
+                evidence_count=len(result.evidence),
                 join_count=joins,
                 context_tokens=context_tokens,
+                prompt_tokens=_context_token_count(ranked_prompt),
                 cited_ids=result.cited_ids,
                 error=None,
             )
@@ -571,9 +577,10 @@ class SpiderJoinEvaluation:
                 prompt=shuffled_prompt,
                 answer=shuffled_answer,
                 latency_seconds=round(time.monotonic() - start, 3),
-                evidence_count=len(shuffled_cited_ids),
+                evidence_count=len(shuffled_evidence),
                 join_count=shuffled_joins,
                 context_tokens=shuffled_tokens,
+                prompt_tokens=_context_token_count(shuffled_prompt),
                 cited_ids=shuffled_cited_ids,
                 error=None,
             )
@@ -587,6 +594,7 @@ class SpiderJoinEvaluation:
                 evidence_count=0,
                 join_count=0,
                 context_tokens=0,
+                prompt_tokens=0,
                 cited_ids=[],
                 error=str(exc),
             )
@@ -598,6 +606,7 @@ class SpiderJoinEvaluation:
                 evidence_count=0,
                 join_count=0,
                 context_tokens=0,
+                prompt_tokens=0,
                 cited_ids=[],
                 error=str(exc),
             )
@@ -611,7 +620,7 @@ class SpiderJoinEvaluation:
         )
 
     def _evidence_ids_from_condition(self, cond: ConditionResult) -> set[str]:
-        return set(cond.cited_ids)
+        return {f"E{i}" for i in range(1, cond.evidence_count + 1)}
 
     def _best_single_table_rows(
         self, schema_dir: Path, question: str, sample_rows: int
@@ -799,6 +808,7 @@ class SpiderJoinEvaluation:
                 "mean_faithfulness": round(sum(c.faithfulness for c in cond_results) / n, 4) if n else 0,
                 "mean_latency_seconds": round(sum(c.latency_seconds for c in cond_results) / n, 4) if n else 0,
                 "mean_context_tokens": round(sum(c.context_tokens for c in cond_results) / n, 1) if n else 0,
+                "mean_prompt_tokens": round(sum(c.prompt_tokens for c in cond_results) / n, 1) if n else 0,
                 "mean_join_count": round(sum(c.join_count for c in cond_results) / n, 2) if n else 0,
                 "error_rate": round(sum(1 for c in cond_results if c.error) / n, 4) if n else 0,
             }
@@ -858,7 +868,7 @@ class SpiderJoinEvaluation:
                     f"  [{cond['condition']}]",
                     f"  Answer: {cond['answer'] or '[no answer]'}",
                     f"  Exact Match: {cond['exact_match']}  Token F1: {cond['token_f1']:.3f}  Faithfulness: {cond['faithfulness']:.3f}",
-                    f"  Latency: {cond['latency_seconds']}s  Context Tokens: {cond['context_tokens']}  Joins: {cond['join_count']}",
+                    f"  Latency: {cond['latency_seconds']}s  Evidence Tokens: {cond['context_tokens']}  Prompt Tokens: {cond['prompt_tokens']}  Joins: {cond['join_count']}",
                     f"  Error: {cond['error'] or '[none]'}",
                     "",
                 ])

@@ -1,5 +1,4 @@
 import logging
-from collections import defaultdict
 from dataclasses import dataclass
 
 from ._datalake import DataLake
@@ -80,31 +79,33 @@ class RowRanker:
         top_r: int,
     ) -> list[tuple[float, dict, JoinPath]]:
         """
-        Select the best rows while suppressing near-duplicates from the
-        same join path.
+        Select the best rows while suppressing near-duplicates across all
+        join paths.
 
         This method is needed because top-ranked results otherwise tend to
-        collapse into redundant variants of the same evidence.
+        collapse into redundant variants of the same evidence, including
+        identical rows produced by two different paths covering the same tables.
         """
         selected: list[tuple[float, dict, JoinPath]] = []
-        selected_tokens_by_path: dict[str, list[set[str]]] = defaultdict(list)
+        all_selected_tokens: list[set[str]] = []
 
         for base_score, row, path in ranked:
             row_tokens = self._row_token_set(row)
             similarity_penalty = 0.0
 
-            for existing_tokens in selected_tokens_by_path[path.path_id]:
-                similarity_penalty = max(
-                    similarity_penalty,
-                    self._token_jaccard_similarity(row_tokens, existing_tokens),
-                )
+            for existing_tokens in all_selected_tokens:
+                sim = self._token_jaccard_similarity(row_tokens, existing_tokens)
+                if sim > similarity_penalty:
+                    similarity_penalty = sim
+                if similarity_penalty >= 0.98:
+                    break
 
             if similarity_penalty >= 0.98:
                 continue
 
             adjusted_score = base_score - (0.15 * similarity_penalty)
             selected.append((adjusted_score, row, path))
-            selected_tokens_by_path[path.path_id].append(row_tokens)
+            all_selected_tokens.append(row_tokens)
 
             if len(selected) >= top_r:
                 break
