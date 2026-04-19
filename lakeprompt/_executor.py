@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from ._datalake import DataLake
 from ._executor_ranking import RowRanker
 from ._executor_sql import QueryPlanApplier, SqlBuilder, query_plan_tables
-from ._models import JoinPath, JoinedTuple, JoinProvenance, QueryPlan
+from ._models import JoinPath, JoinedTuple, JoinProvenance, OutputColumn, QueryPlan
 from ._tracing import NULL_LOGGER, PipelineLogger
 
 """
@@ -79,12 +79,14 @@ class TupleExecutor:
         q_emb = ranker.embed_question(question)
         all_scored: list[tuple[float, dict, JoinPath]] = []
         sql_by_path_id: dict[str, str] = {}
+        output_columns_by_path_id: dict[str, list[OutputColumn]] = {}
 
         for path in paths[:max_paths_to_execute]:
-            rows, executed_sql = self._execute_path(path, question=question, query_plan=query_plan)
+            rows, executed_sql, output_columns = self._execute_path(path, question=question, query_plan=query_plan)
             if not rows:
                 continue
             sql_by_path_id[path.path_id] = executed_sql
+            output_columns_by_path_id[path.path_id] = output_columns
 
             for score, row in ranker.score_rows(rows, q_emb, path):
                 all_scored.append((score, row, path))
@@ -104,14 +106,18 @@ class TupleExecutor:
                 for score, row, path in diverse
             ],
         )
-        return self._to_joined_tuples(diverse, sql_by_path_id=sql_by_path_id)
+        return self._to_joined_tuples(
+            diverse,
+            sql_by_path_id=sql_by_path_id,
+            output_columns_by_path_id=output_columns_by_path_id,
+        )
 
     def _execute_path(
         self,
         path: JoinPath,
         question: str = "",
         query_plan: QueryPlan | None = None,
-    ) -> tuple[list[dict], str]:
+    ) -> tuple[list[dict], str, list[OutputColumn]]:
         """
         Build and execute SQL for a join path, returning rows plus the
         final executed SQL string.
@@ -143,18 +149,19 @@ class TupleExecutor:
                     ),
                     stacklevel=2,
                 )
-                return [], ""
+                return [], "", []
 
         sql_builder = SqlBuilder(self.lake)
         try:
             sql = sql_builder.build_path_sql(path)
         except ValueError as exc:
             warnings.warn(f"Skipping malformed JoinPath: {exc}", stacklevel=2)
-            return [], ""
+            return [], "", []
 
+        output_columns: list[OutputColumn] = []
         if question or query_plan is not None:
             plan_applier = QueryPlanApplier(self.lake, logger=self.logger)
-            sql = plan_applier.apply(question, sql, path, query_plan=query_plan)
+            sql, output_columns = plan_applier.apply(question, sql, path, query_plan=query_plan)
 
         self.logger.log("sql_query", "Executing SQL query.", {"path_id": path.path_id, "sql": sql})
 
@@ -162,19 +169,20 @@ class TupleExecutor:
             result_df = self.lake.query(sql)
         except Exception as exc:  # noqa: BLE001
             warnings.warn(f"Query failed for path {path.tables}: {exc}", stacklevel=2)
-            return [], _normalize_sql(sql)
+            return [], _normalize_sql(sql), output_columns
 
         rows = result_df.to_dicts()
 
         if not rows:
             warnings.warn(f"Join path {path.tables} produced zero rows.", stacklevel=2)
 
-        return rows, _normalize_sql(sql)
+        return rows, _normalize_sql(sql), output_columns
 
     def _to_joined_tuples(
         self,
         ranked: list[tuple[float, dict, JoinPath]],
         sql_by_path_id: dict[str, str],
+        output_columns_by_path_id: dict[str, list[OutputColumn]],
     ) -> list[JoinedTuple]:
         """
         Wrap scored rows into `JoinedTuple` objects with sequential evidence IDs.
@@ -195,6 +203,7 @@ class TupleExecutor:
             JoinedTuple(
                 evidence_id=f"E{idx}",  # E1, E2, E3, … used by the packager to cite evidence
                 data=row,
+                output_columns=list(output_columns_by_path_id.get(path.path_id, [])),
                 provenance=JoinProvenance(
                     path_id=path.path_id,
                     tables=list(path.tables),

@@ -74,6 +74,23 @@ class JoinProvenance:
     sql: str
 
 
+@dataclass(frozen=True)
+class OutputColumn:
+    """
+    Metadata describing one concrete output column produced by execution.
+
+    Attributes:
+        output_key: Actual key present in the executed row payload.
+        table: Source table when applicable.
+        column: Source column when applicable.
+        aggregation: Aggregate wrapper such as `COUNT` or `DISTINCT`.
+    """
+    output_key: str
+    table: str | None
+    column: str
+    aggregation: str | None = None
+
+
 @dataclass
 class JoinedTuple:
     """
@@ -84,14 +101,16 @@ class JoinedTuple:
     retrieved rows with explicit provenance, not just as plain text.
 
     Attributes:
-        evidence_id: Stable evidence identifier such as `E1`.
+    evidence_id: Stable evidence identifier such as `E1`.
         data: Joined row payload.
+        output_columns: Concrete output-column metadata for `data`.
         provenance: Structured description of how the row was produced.
         join_path: Full join path object that produced the row.
         relevance_score: Ranking score assigned by the executor.
     """
     evidence_id: str
     data: dict[str, Any]
+    output_columns: list[OutputColumn]
     provenance: JoinProvenance
     join_path: JoinPath
     relevance_score: float

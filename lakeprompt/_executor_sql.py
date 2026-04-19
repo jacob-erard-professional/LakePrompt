@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 
 from ._datalake import DataLake
 from ._llm_utilities import plan_llm_query
-from ._models import JoinPath, QueryFilter, QueryOrder, QueryPlan, QuerySelect
+from ._models import JoinPath, OutputColumn, QueryFilter, QueryOrder, QueryPlan, QuerySelect
 from ._tracing import NULL_LOGGER, PipelineLogger
 
 _INT_PATTERN = re.compile(r"^[+-]?\d+$")
@@ -161,15 +161,15 @@ def _group_item_to_sql(item: str) -> str:
     return _planned_column(item)
 
 
-def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
+def compile_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> tuple[str, list[OutputColumn]]:
     """
-    Deterministically apply a structured QueryPlan to a base SQL query.
+    Deterministically compile a structured QueryPlan to SQL plus output metadata.
 
     This function is needed because the system wants inspectable model
     intent without allowing free-form SQL rewrites.
     """
     if not isinstance(plan, QueryPlan):
-        return sql_query
+        return sql_query, []
     if not (
         plan.projections
         or plan.filters
@@ -178,13 +178,14 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
         or plan.order_by
         or plan.limit is not None
     ):
-        return sql_query
+        return sql_query, []
 
     sql = sql_query.strip()
     from_clause = f'FROM (\n{sql}\n) AS "__lakeprompt_base"'
 
     select_clause = "SELECT *"
     projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
+    output_columns: list[OutputColumn] = []
     select_items = list(plan.projections)
     projected_keys = {
         (item.table, item.column, item.aggregation)
@@ -207,6 +208,14 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
             alias = _select_alias(item, idx)
             projection_aliases[(item.table, item.column, item.aggregation)] = alias
             projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
+            output_columns.append(
+                OutputColumn(
+                    output_key=alias,
+                    table=item.table,
+                    column=item.column,
+                    aggregation=item.aggregation,
+                )
+            )
         projection_sql = ", ".join(projection_parts)
         select_clause = f"SELECT {projection_sql}"
     elif select_items:
@@ -218,18 +227,43 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
                 f"{_group_item_to_sql(group_item)} AS {_quote_identifier(alias)}"
             )
             grouped_aliases.add(alias)
+            output_columns.append(
+                OutputColumn(
+                    output_key=alias,
+                    table=group_item.split(".", 1)[0] if "." in group_item else None,
+                    column=group_item.split(".", 1)[-1],
+                    aggregation=None,
+                )
+            )
         for idx, item in enumerate(select_items):
             alias = _select_alias(item, idx)
             projection_aliases[(item.table, item.column, item.aggregation)] = alias
             if alias in grouped_aliases:
                 continue
             projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
+            output_columns.append(
+                OutputColumn(
+                    output_key=alias,
+                    table=item.table,
+                    column=item.column,
+                    aggregation=item.aggregation,
+                )
+            )
         select_clause = f"SELECT {', '.join(projection_parts)}"
     elif plan.group_by:
         group_projection_parts = [
             f"{_group_item_to_sql(item)} AS {_quote_identifier(item.split('.', 1)[-1])}"
             for item in plan.group_by
         ]
+        output_columns.extend(
+            OutputColumn(
+                output_key=item.split(".", 1)[-1],
+                table=item.split(".", 1)[0] if "." in item else None,
+                column=item.split(".", 1)[-1],
+                aggregation=None,
+            )
+            for item in plan.group_by
+        )
         if group_projection_parts:
             select_clause = f"SELECT {', '.join(group_projection_parts)}"
 
@@ -271,7 +305,12 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
     if plan.limit is not None:
         parts.append(f"LIMIT {plan.limit}")
 
-    return "\n".join(parts)
+    return "\n".join(parts), output_columns
+
+
+def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
+    sql, _output_columns = compile_query_plan_to_sql(sql_query, plan)
+    return sql
 
 
 def query_plan_tables(plan: QueryPlan | None) -> set[str]:
@@ -427,7 +466,7 @@ class QueryPlanApplier:
         sql: str,
         path: JoinPath,
         query_plan: QueryPlan | None = None,
-    ) -> str:
+    ) -> tuple[str, list[OutputColumn]]:
         """
         Apply a shared or inferred query plan to a base path SQL query.
 
@@ -445,7 +484,7 @@ class QueryPlanApplier:
             raw_plan = query_plan if query_plan is not None else plan_llm_query(question, sql, involved_cards)
             coerced_plan = self._coerce_query_plan_types(raw_plan, involved_cards)
             sanitized_plan = self._sanitize_query_plan(coerced_plan, involved_cards)
-            refined_sql = apply_query_plan_to_sql(sql, sanitized_plan)
+            refined_sql, output_columns = compile_query_plan_to_sql(sql, sanitized_plan)
             self.logger.log(
                 "query_plan_debug",
                 "Transformed query plan before SQL generation.",
@@ -466,13 +505,13 @@ class QueryPlanApplier:
                 "Applied query plan to SQL.",
                 {"path_id": path.path_id, "query_plan": sanitized_plan, "sql": refined_sql},
             )
-            return refined_sql
+            return refined_sql, output_columns
         except Exception as exc:  # noqa: BLE001
             warnings.warn(
                 f"Query-plan application failed for path {path.tables}: {exc}",
                 stacklevel=2,
             )
-            return sql
+            return sql, []
 
     def _coerce_query_plan_types(
         self,

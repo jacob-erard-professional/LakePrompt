@@ -1,7 +1,7 @@
 import re
 from dataclasses import asdict
 
-from ._models import JoinedTuple, LakeContext, QueryPlan
+from ._models import JoinedTuple, LakeContext, OutputColumn, QueryPlan
 from ._llm_utilities import _package_with_toon
 from ._tracing import NULL_LOGGER, PipelineLogger
 
@@ -98,7 +98,7 @@ class ContextPackager:
             {
                 "id": t.evidence_id,
                 "provenance": asdict(t.provenance),
-                **self._display_row_payload(t.data, query_plan),
+                **self._display_row_payload(t.data, query_plan, t.output_columns),
             }
             for t in included
         ]
@@ -158,7 +158,7 @@ class ContextPackager:
             candidate = included + [t]
             overhead = self._estimate_tokens(question) + len(candidate) * 10
             data_tokens = sum(
-                self._estimate_tokens(str(self._project_row_data(c.data, query_plan))) for c in candidate
+                self._estimate_tokens(str(self._project_row_data(c.data, query_plan, c.output_columns))) for c in candidate
             )
             if included and overhead + data_tokens > self.max_tokens:
                 break
@@ -170,6 +170,7 @@ class ContextPackager:
         self,
         row: dict,
         query_plan: QueryPlan | None,
+        output_columns: list[OutputColumn] | None = None,
     ) -> dict:
         """
         Project a joined row down to plan-relevant columns for prompting.
@@ -177,7 +178,7 @@ class ContextPackager:
         if query_plan is None:
             return row
 
-        relevant_keys = self._relevant_row_keys(query_plan, row)
+        relevant_keys = self._relevant_row_keys(query_plan, row, output_columns or [])
         if not relevant_keys:
             return row
 
@@ -188,12 +189,13 @@ class ContextPackager:
         self,
         row: dict,
         query_plan: QueryPlan | None,
+        output_columns: list[OutputColumn] | None = None,
     ) -> dict:
         """
         Return prompt-facing row data with readable field names plus a stable
         mapping back to internal execution keys.
         """
-        projected = self._project_row_data(row, query_plan)
+        projected = self._project_row_data(row, query_plan, output_columns or [])
         display_data = prettify_row_data_keys(projected)
         field_map: dict[str, str] = {}
         used_internal: set[str] = set()
@@ -219,7 +221,12 @@ class ContextPackager:
             "field_map": field_map,
         }
 
-    def _relevant_row_keys(self, query_plan: QueryPlan, row: dict) -> list[str]:
+    def _relevant_row_keys(
+        self,
+        query_plan: QueryPlan,
+        row: dict,
+        output_columns: list[OutputColumn],
+    ) -> list[str]:
         """
         Resolve plan fields to concrete row keys.
         """
@@ -245,6 +252,10 @@ class ContextPackager:
                 if key not in seen:
                     seen.add(key)
                     resolved.append(key)
+            for key in self._match_output_columns(output_columns, table, column):
+                if key in row and key not in seen:
+                    seen.add(key)
+                    resolved.append(key)
         return resolved
 
     @staticmethod
@@ -263,6 +274,24 @@ class ContextPackager:
             elif key.endswith(f"__{column}") and table is None:
                 matches.append(key)
 
+        return matches
+
+    @staticmethod
+    def _match_output_columns(
+        output_columns: list[OutputColumn],
+        table: str | None,
+        column: str,
+    ) -> list[str]:
+        """
+        Match logical query-plan references against compiler-produced output metadata.
+        """
+        matches: list[str] = []
+        for item in output_columns:
+            if item.column != column:
+                continue
+            if table is not None and item.table != table:
+                continue
+            matches.append(item.output_key)
         return matches
 
     @staticmethod
