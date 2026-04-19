@@ -5,8 +5,12 @@ import csv
 import json
 import os
 import random
+import re
+import sqlite3
+import sys
 import time
-from dataclasses import asdict, dataclass, field
+from collections import Counter
+from dataclasses import dataclass, field
 from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any
@@ -15,17 +19,82 @@ import anthropic
 import polars as pl
 
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from lakeprompt._packager import prettify_row_data_keys
+
+
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
 
 def _tokenize(text: str) -> list[str]:
-    """Lowercase whitespace-split tokens for F1 computation."""
-    return text.lower().split()
+    """Lowercase alphanumeric-ish tokens for answer scoring."""
+    normalized = re.sub(r"(?<=\d),(?=\d)", "", text.lower())
+    return re.findall(r"[a-z0-9_.-]+", normalized)
+
+
+def _extract_answer_atoms(value: Any) -> list[str]:
+    """
+    Flatten a structured answer into comparable primitive atoms.
+
+    Dict keys are ignored so structured SQL ground truth compares on
+    returned values rather than JSON field names.
+    """
+    if value is None:
+        return []
+    if isinstance(value, dict):
+        atoms: list[str] = []
+        for child in value.values():
+            atoms.extend(_extract_answer_atoms(child))
+        return atoms
+    if isinstance(value, list):
+        atoms: list[str] = []
+        for child in value:
+            atoms.extend(_extract_answer_atoms(child))
+        return atoms
+    if isinstance(value, bool):
+        return ["true" if value else "false"]
+    return _tokenize(str(value))
+
+
+def _parse_answer_payload(text: str) -> Any | None:
+    """
+    Parse a response as JSON when it looks like structured output.
+    """
+    stripped = text.strip()
+    if not stripped:
+        return None
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+
+
+def _f1_from_counters(pred_counter: Counter[str], gt_counter: Counter[str]) -> float:
+    """
+    Compute multiset F1 from token/atom counters.
+    """
+    pred_total = sum(pred_counter.values())
+    gt_total = sum(gt_counter.values())
+    if not pred_total or not gt_total:
+        return 0.0
+    common = sum((pred_counter & gt_counter).values())
+    if not common:
+        return 0.0
+    precision = common / pred_total
+    recall = common / gt_total
+    return 2 * precision * recall / (precision + recall)
 
 
 def _token_f1(prediction: str, ground_truth: str) -> float:
     """
-    Compute token-overlap F1 between a predicted answer and ground truth.
+    Compute answer F1 between a predicted answer and ground truth.
+
+    For structured SQL-result ground truth, compare flattened primitive
+    values rather than raw JSON punctuation and keys. For plain text,
+    fall back to token overlap.
 
     Args:
         prediction: Model-generated answer string.
@@ -34,18 +103,19 @@ def _token_f1(prediction: str, ground_truth: str) -> float:
     Returns:
         F1 score between 0.0 and 1.0.
     """
-    pred_tokens = _tokenize(prediction)
-    gt_tokens = _tokenize(ground_truth)
-    if not pred_tokens or not gt_tokens:
-        return 0.0
-    pred_set = set(pred_tokens)
-    gt_set = set(gt_tokens)
-    common = pred_set & gt_set
-    if not common:
-        return 0.0
-    precision = len(common) / len(pred_set)
-    recall = len(common) / len(gt_set)
-    return 2 * precision * recall / (precision + recall)
+    gt_payload = _parse_answer_payload(ground_truth)
+    pred_payload = _parse_answer_payload(prediction)
+
+    if gt_payload is not None:
+        gt_counter = Counter(_extract_answer_atoms(gt_payload))
+        pred_counter = Counter(
+            _extract_answer_atoms(pred_payload)
+            if pred_payload is not None
+            else _tokenize(prediction)
+        )
+        return _f1_from_counters(pred_counter, gt_counter)
+
+    return _f1_from_counters(Counter(_tokenize(prediction)), Counter(_tokenize(ground_truth)))
 
 
 def _exact_match(prediction: str, ground_truth: str) -> bool:
@@ -107,6 +177,7 @@ class ConditionResult:
     context_tokens: int  # whitespace-token count of serialized evidence lines only
     prompt_tokens: int = 0  # whitespace-token count of the full prompt sent to the LLM
     cited_ids: list[str] = field(default_factory=list)
+    generated_sql: list[str] = field(default_factory=list)
     error: str | None = None
     # Filled in after ground truth is available
     exact_match: bool = False
@@ -120,6 +191,8 @@ class EvaluationExample:
     question: str
     join_metadata: dict[str, Any]
     ground_truth: str  # populated from question generation when available
+    ground_truth_error: str | None = None
+    expected_sql: str = ""
     conditions: list[ConditionResult] = field(default_factory=list)
 
 
@@ -274,6 +347,7 @@ class SpiderJoinEvaluation:
                     schema_dir=schema_dir,
                     schema_description=schema_descriptions[schema_id],
                     question=item["question"],
+                    expected_sql=item.get("query", ""),
                     ground_truth=item.get("ground_truth", ""),
                     join_metadata={},
                     sample_rows=sample_rows,
@@ -290,6 +364,7 @@ class SpiderJoinEvaluation:
         schema_dir: Path,
         schema_description: str,
         question: str,
+        expected_sql: str,
         ground_truth: str,
         join_metadata: dict[str, Any],
         sample_rows: int,
@@ -299,9 +374,16 @@ class SpiderJoinEvaluation:
         example = EvaluationExample(
             schema_id=schema_id,
             question=question,
+            expected_sql=expected_sql,
             join_metadata=join_metadata,
             ground_truth=ground_truth,
         )
+        if expected_sql.strip():
+            try:
+                example.ground_truth = self._execute_expected_sql(schema_dir, expected_sql)
+                example.ground_truth_error = None
+            except Exception as exc:  # noqa: BLE001
+                example.ground_truth_error = str(exc)
 
         example.conditions.append(self._run_no_context(question))
         example.conditions.append(
@@ -320,13 +402,67 @@ class SpiderJoinEvaluation:
 
         evidence_ids = self._evidence_ids_from_condition(lp_result)
         for cond in example.conditions:
-            cond.exact_match = _exact_match(cond.answer, ground_truth)
-            cond.token_f1 = _token_f1(cond.answer, ground_truth)
+            cond.exact_match = _exact_match(cond.answer, example.ground_truth)
+            cond.token_f1 = _token_f1(cond.answer, example.ground_truth)
             cond.faithfulness = _faithfulness_score(
                 cond.answer, cond.cited_ids, evidence_ids
             )
 
         return example
+
+    def _load_csvs_into_sqlite(
+        self,
+        conn: sqlite3.Connection,
+        schema_dir: Path,
+    ) -> None:
+        for csv_path in sorted(schema_dir.glob("*.csv")):
+            table_name = csv_path.stem
+            with csv_path.open(newline="", encoding="utf-8") as handle:
+                reader = csv.reader(handle)
+                try:
+                    headers = next(reader)
+                except StopIteration:
+                    continue
+                quoted_columns = [f'"{header}" TEXT' for header in headers]
+                conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
+                conn.execute(f'CREATE TABLE "{table_name}" ({", ".join(quoted_columns)})')
+                placeholders = ", ".join("?" for _ in headers)
+                insert_sql = f'INSERT INTO "{table_name}" VALUES ({placeholders})'
+                rows = [tuple(row) for row in reader]
+                if rows:
+                    conn.executemany(insert_sql, rows)
+        conn.commit()
+
+    def _canonical_ground_truth(self, cursor: sqlite3.Cursor) -> str:
+        columns = [desc[0] for desc in cursor.description or []]
+        rows = cursor.fetchall()
+
+        if not columns:
+            return ""
+        if len(columns) == 1:
+            values = [row[0] for row in rows]
+            if not values:
+                return ""
+            if len(values) == 1:
+                return str(values[0])
+            return json.dumps(values, ensure_ascii=True)
+
+        payload = [
+            {column: value for column, value in zip(columns, row, strict=False)}
+            for row in rows
+        ]
+        if not payload:
+            return ""
+        return json.dumps(payload, ensure_ascii=True, sort_keys=True)
+
+    def _execute_expected_sql(self, schema_dir: Path, sql: str) -> str:
+        conn = sqlite3.connect(":memory:")
+        try:
+            self._load_csvs_into_sqlite(conn, schema_dir)
+            cursor = conn.execute(sql)
+            return self._canonical_ground_truth(cursor)
+        finally:
+            conn.close()
 
     def _load_question_items(self, questions_path: Path) -> list[dict[str, str]]:
         if not questions_path.exists():
@@ -361,16 +497,21 @@ class SpiderJoinEvaluation:
         for item in items:
             if not isinstance(item, dict):
                 raise ValueError("Each question entry must be an object.")
-            schema_id = str(item.get("schema_id", "")).strip()
+            schema_id = str(
+                item.get("schema_id", "") or item.get("db_id", "")
+            ).strip()
             question = str(item.get("question", "")).strip()
             if not schema_id or not question:
                 raise ValueError(
-                    "Each question entry must include non-empty 'schema_id' and 'question'."
+                    "Each question entry must include non-empty 'schema_id' (or 'db_id') and 'question'."
                 )
             normalized_item = {
                 "schema_id": schema_id,
                 "question": question,
             }
+            query = str(item.get("query", "")).strip()
+            if query:
+                normalized_item["query"] = query
             ground_truth = str(item.get("ground_truth", "")).strip()
             if ground_truth:
                 normalized_item["ground_truth"] = ground_truth
@@ -536,6 +677,7 @@ class SpiderJoinEvaluation:
         try:
             lp = self._get_lakeprompt(schema_dir, lakeprompt_model, cache_path)
             result = lp.query(question)
+            generated_sql = self._extract_generated_sql(result.evidence)
 
             evidence_lines = self._serialize_evidence(result.evidence)
             context_tokens = _context_token_count(evidence_lines)
@@ -543,7 +685,7 @@ class SpiderJoinEvaluation:
             ranked_prompt = self._build_lakeprompt_prompt(question, evidence_lines)
             ranked_condition = ConditionResult(
                 condition="lakeprompt_ranked",
-                prompt=ranked_prompt,
+                prompt=result.prompt or ranked_prompt,
                 answer=result.text,
                 latency_seconds=round(time.monotonic() - start, 3),
                 evidence_count=len(result.evidence),
@@ -551,6 +693,7 @@ class SpiderJoinEvaluation:
                 context_tokens=context_tokens,
                 prompt_tokens=_context_token_count(ranked_prompt),
                 cited_ids=result.cited_ids,
+                generated_sql=generated_sql,
                 error=None,
             )
 
@@ -582,6 +725,7 @@ class SpiderJoinEvaluation:
                 context_tokens=shuffled_tokens,
                 prompt_tokens=_context_token_count(shuffled_prompt),
                 cited_ids=shuffled_cited_ids,
+                generated_sql=generated_sql,
                 error=None,
             )
         except Exception as exc:  # noqa: BLE001
@@ -596,6 +740,7 @@ class SpiderJoinEvaluation:
                 context_tokens=0,
                 prompt_tokens=0,
                 cited_ids=[],
+                generated_sql=[],
                 error=str(exc),
             )
             shuffled_condition = ConditionResult(
@@ -608,14 +753,26 @@ class SpiderJoinEvaluation:
                 context_tokens=0,
                 prompt_tokens=0,
                 cited_ids=[],
+                generated_sql=[],
                 error=str(exc),
             )
 
         return ranked_condition, shuffled_condition
 
+    def _extract_generated_sql(self, evidence: list) -> list[str]:
+        seen: set[str] = set()
+        queries: list[str] = []
+        for item in evidence:
+            provenance = getattr(item, "provenance", None)
+            sql = getattr(provenance, "sql", "") if provenance is not None else ""
+            if sql and sql not in seen:
+                seen.add(sql)
+                queries.append(sql)
+        return queries
+
     def _serialize_evidence(self, evidence: list) -> str:
         return "\n".join(
-            f"{item.evidence_id}: {json.dumps(item.data, default=str, sort_keys=True)}"
+            f"{item.evidence_id}: {json.dumps(prettify_row_data_keys(item.data), default=str, sort_keys=True)}"
             for item in evidence
         )
 
@@ -778,23 +935,57 @@ class SpiderJoinEvaluation:
     def _build_payload(self, examples: list[EvaluationExample]) -> dict[str, Any]:
         return self._build_payload_with_metadata(examples, {})
 
+    def _serialize_condition(self, condition: ConditionResult) -> dict[str, Any]:
+        return {
+            "baseline_name": condition.condition,
+            "exact_prompt_sent_via_api": condition.prompt,
+            "response_from_claude": condition.answer,
+            "generated_sql": condition.generated_sql,
+            "scoring_metrics": {
+                "exact_match": condition.exact_match,
+                "token_f1": condition.token_f1,
+                "faithfulness": condition.faithfulness,
+                "latency_seconds": condition.latency_seconds,
+                "evidence_count": condition.evidence_count,
+                "join_count": condition.join_count,
+                "context_tokens": condition.context_tokens,
+                "prompt_tokens": condition.prompt_tokens,
+                "cited_ids": condition.cited_ids,
+                "error": condition.error,
+            },
+        }
+
     def _build_payload_with_metadata(
         self,
         examples: list[EvaluationExample],
         extra_metadata: dict[str, Any],
     ) -> dict[str, Any]:
+        baseline_order = {
+            "no_context": 0,
+            "single_table": 1,
+            "naive_multitable": 2,
+            "schema_baseline": 3,
+            "join_no_ranking": 4,
+            "lakeprompt_ranked": 5,
+        }
         serialized_examples = []
         for ex in examples:
             serialized_examples.append({
                 "schema_id": ex.schema_id,
                 "question": ex.question,
+                "expected_sql": ex.expected_sql,
                 "ground_truth": ex.ground_truth,
+                "ground_truth_error": ex.ground_truth_error,
                 "join_metadata": ex.join_metadata,
-                "conditions": [asdict(c) for c in ex.conditions],
+                "baselines": [self._serialize_condition(c) for c in ex.conditions],
             })
 
         # Aggregate metrics per condition across all examples
         condition_names = [c.condition for c in examples[0].conditions] if examples else []
+        condition_names = sorted(
+            condition_names,
+            key=lambda name: (baseline_order.get(name, 999), name),
+        )
         aggregate: dict[str, dict[str, Any]] = {}
         for name in condition_names:
             cond_results = [
@@ -838,41 +1029,151 @@ class SpiderJoinEvaluation:
             json.dump(payload, handle, indent=2)
 
     def _write_txt(self, payload: dict[str, Any]) -> None:
+        baseline_order = {
+            "no_context": 0,
+            "single_table": 1,
+            "naive_multitable": 2,
+            "schema_baseline": 3,
+            "join_no_ranking": 4,
+            "lakeprompt_ranked": 5,
+        }
+
         lines = [
-            "LakePrompt Evaluation Report",
-            f"Generated at: {payload['generated_at']}",
-            f"Dataset root: {payload['dataset_root']}",
-            f"Metadata CSV: {payload['metadata_csv']}",
-            f"Claude model: {payload['claude_model']}",
+            "# LakePrompt Evaluation Report",
             "",
-            "=== Aggregate Metrics ===",
+            "## Run Metadata",
+            f"- Generated at: `{payload['generated_at']}`",
+            f"- Dataset root: `{payload['dataset_root']}`",
+            f"- Metadata CSV: `{payload['metadata_csv']}`",
+            f"- Claude model: `{payload['claude_model']}`",
         ]
 
-        for cond_name, metrics in payload.get("aggregate_metrics", {}).items():
-            lines.append(f"\nCondition: {cond_name}")
-            for k, v in metrics.items():
-                lines.append(f"  {k}: {v}")
+        if "questions_file" in payload:
+            lines.append(f"- Questions file: `{payload['questions_file']}`")
+        if "max_questions" in payload:
+            lines.append(f"- Max questions: `{payload['max_questions']}`")
 
-        lines.extend(["", "=" * 80, ""])
+        lines.extend([
+            "## Metric Glossary",
+            "",
+            "- `exact_match_rate`: Fraction of examples where the answer text exactly matches the ground truth after lowercasing and trimming.",
+            "- `mean_token_f1`: Average token-overlap F1 between the answer text and ground truth.",
+            "- `mean_faithfulness`: Average fraction of valid evidence IDs cited or mentioned in the answer.",
+            "- `mean_latency_seconds`: Average wall-clock runtime for that baseline per example.",
+            "- `mean_context_tokens`: Average whitespace-token count of the evidence/context portion only.",
+            "- `mean_prompt_tokens`: Average whitespace-token count of the full prompt sent to Claude.",
+            "- `mean_join_count`: Average number of distinct join paths used by the evidence for that baseline.",
+            "- `error_rate`: Fraction of examples where that baseline recorded an execution or API error.",
+            "- `exact_match`: Whether one example's answer exactly matched the ground truth after lowercasing and trimming.",
+            "- `token_f1`: Token-overlap F1 for one example.",
+            "- `faithfulness`: Fraction of valid evidence IDs cited or explicitly mentioned for one example.",
+            "- `latency_seconds`: Runtime for one example.",
+            "- `evidence_count`: Number of evidence rows returned for one example.",
+            "- `join_count`: Number of distinct join paths represented in those evidence rows.",
+            "- `context_tokens`: Approximate whitespace-token count of the evidence/context only for one example.",
+            "- `prompt_tokens`: Approximate whitespace-token count of the full prompt for one example.",
+            "- `cited_ids`: Evidence IDs cited by the answer when present.",
+            "- `error`: Execution or API error captured for that example, if any.",
+            "",
+            "## Aggregate Metrics",
+            "",
+        ])
+
+        for cond_name, metrics in payload.get("aggregate_metrics", {}).items():
+            lines.extend([
+                f"### {cond_name}",
+                "",
+                "| Metric | Value |",
+                "| --- | --- |",
+            ])
+            for key, value in metrics.items():
+                lines.append(f"| `{key}` | `{value}` |")
+            lines.append("")
+
+        lines.extend(["## Examples", ""])
 
         for index, example in enumerate(payload["examples"], start=1):
+            ground_truth = example["ground_truth"] or "[none]"
             lines.extend([
-                f"Example {index}",
-                f"Schema: {example['schema_id']}",
-                f"Question: {example['question']}",
-                f"Ground Truth: {example['ground_truth']}",
+                f"## Example {index}",
+                "",
+                f"- Schema: `{example['schema_id']}`",
+                f"- Question: {example['question']}",
+                f"- Ground Truth: {ground_truth}",
                 "",
             ])
-            for cond in example["conditions"]:
+            if example.get("ground_truth_error"):
                 lines.extend([
-                    f"  [{cond['condition']}]",
-                    f"  Answer: {cond['answer'] or '[no answer]'}",
-                    f"  Exact Match: {cond['exact_match']}  Token F1: {cond['token_f1']:.3f}  Faithfulness: {cond['faithfulness']:.3f}",
-                    f"  Latency: {cond['latency_seconds']}s  Evidence Tokens: {cond['context_tokens']}  Prompt Tokens: {cond['prompt_tokens']}  Joins: {cond['join_count']}",
-                    f"  Error: {cond['error'] or '[none]'}",
+                    f"- Ground Truth Error: `{example['ground_truth_error']}`",
                     "",
                 ])
-            lines.extend(["-" * 80, ""])
+            if example.get("expected_sql"):
+                lines.extend([
+                    "**Expected SQL Query**",
+                    "",
+                    "```sql",
+                    example["expected_sql"],
+                    "```",
+                    "",
+                ])
+            shared_generated_sql: list[str] = []
+            for baseline in example["baselines"]:
+                if baseline["baseline_name"] in {"join_no_ranking", "lakeprompt_ranked"}:
+                    shared_generated_sql = baseline.get("generated_sql", [])
+                    if shared_generated_sql:
+                        break
+            if shared_generated_sql:
+                lines.extend([
+                    "**LakePrompt Generated Query**",
+                    "",
+                ])
+                for sql in shared_generated_sql:
+                    lines.extend([
+                        "```sql",
+                        sql,
+                        "```",
+                        "",
+                    ])
+            ordered_baselines = sorted(
+                example["baselines"],
+                key=lambda item: (baseline_order.get(item["baseline_name"], 999), item["baseline_name"]),
+            )
+            for cond in ordered_baselines:
+                metrics = cond["scoring_metrics"]
+                cited_ids = ", ".join(metrics["cited_ids"]) if metrics["cited_ids"] else "[none]"
+                lines.extend([
+                    f"### {cond['baseline_name']}",
+                    "",
+                    "**Prompt**",
+                    "",
+                    "```text",
+                    cond["exact_prompt_sent_via_api"] or "[no prompt]",
+                    "```",
+                    "",
+                    "**Response**",
+                    "",
+                    "```text",
+                    cond["response_from_claude"] or "[no answer]",
+                    "```",
+                    "",
+                ])
+                lines.extend([
+                    "**Scoring Metrics**",
+                    "",
+                    "| Metric | Value |",
+                    "| --- | --- |",
+                    f"| `exact_match` | `{metrics['exact_match']}` |",
+                    f"| `token_f1` | `{metrics['token_f1']:.3f}` |",
+                    f"| `faithfulness` | `{metrics['faithfulness']:.3f}` |",
+                    f"| `latency_seconds` | `{metrics['latency_seconds']}` |",
+                    f"| `evidence_count` | `{metrics['evidence_count']}` |",
+                    f"| `join_count` | `{metrics['join_count']}` |",
+                    f"| `context_tokens` | `{metrics['context_tokens']}` |",
+                    f"| `prompt_tokens` | `{metrics['prompt_tokens']}` |",
+                    f"| `cited_ids` | `{cited_ids}` |",
+                    f"| `error` | `{metrics['error'] or '[none]'}` |",
+                    "",
+                ])
 
         self.output_txt.parent.mkdir(parents=True, exist_ok=True)
         self.output_txt.write_text("\n".join(lines), encoding="utf-8")
