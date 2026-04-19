@@ -19,6 +19,14 @@ from ._tracing import NULL_LOGGER, PipelineLogger
 _BARE_STRING_PATTERN = re.compile(r"^[A-Za-z0-9_./:-]+$")
 DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-20250514"
 _FENCED_JSON_PATTERN = re.compile(r"```(?:json)?\s*(.*?)```", re.DOTALL | re.IGNORECASE)
+_VALID_AGGREGATIONS = {
+    "COUNT",
+    "SUM",
+    "AVG",
+    "MIN",
+    "MAX",
+    "DISTINCT",
+}
 
 
 def _is_scalar(value: object) -> bool:
@@ -425,11 +433,12 @@ def _normalize_query_filter(item: object) -> QueryFilter | None:
         return None
     if table is not None and not isinstance(table, str):
         table = None
+    operator = operator.strip().upper()
 
     return QueryFilter(
         table=table,
         column=column.strip(),
-        operator=operator.strip().upper(),
+        operator=operator,
         value=value,
     )
 
@@ -457,11 +466,15 @@ def _normalize_query_select(item: object) -> QuerySelect | None:
         table = None
     if aggregation is not None and not isinstance(aggregation, str):
         aggregation = None
+    if isinstance(aggregation, str):
+        aggregation = aggregation.strip().upper()
+        if aggregation and aggregation not in _VALID_AGGREGATIONS:
+            aggregation = None
 
     return QuerySelect(
         table=table,
         column=column.strip(),
-        aggregation=aggregation.strip().upper() if isinstance(aggregation, str) and aggregation.strip() else None,
+        aggregation=aggregation if isinstance(aggregation, str) and aggregation else None,
     )
 
 
@@ -491,6 +504,10 @@ def _normalize_query_order(item: object) -> QueryOrder | None:
         table = None
     if aggregation is not None and not isinstance(aggregation, str):
         aggregation = None
+    if isinstance(aggregation, str):
+        aggregation = aggregation.strip().upper()
+        if aggregation and aggregation not in _VALID_AGGREGATIONS:
+            aggregation = None
 
     direction = direction.strip().lower()
     if direction not in {"asc", "desc"}:
@@ -500,7 +517,7 @@ def _normalize_query_order(item: object) -> QueryOrder | None:
         table=table,
         column=column.strip(),
         direction=direction,
-        aggregation=aggregation.strip().upper() if isinstance(aggregation, str) and aggregation.strip() else None,
+        aggregation=aggregation if isinstance(aggregation, str) and aggregation else None,
     )
 
 
@@ -614,7 +631,20 @@ def plan_llm_query(
             "Extract a structured query plan needed to refine the SQL so it "
             "answers the question. Do not change the joined tables, join keys, "
             "or join order. Return only incremental intent: filters, projected "
-            "columns, grouping, having, ordering, and limit."
+            "columns, grouping, having, ordering, and limit.\n"
+            "The refined query will be executed with Polars SQL, so only use intent "
+            "that can be compiled into valid Polars SQL.\n"
+            "Do not rely on unsupported SQL constructs, vendor-specific syntax, or "
+            "free-form SQL fragments.\n"
+            "Use only exact table names and exact column names from the provided schema.\n"
+            "Do not invent synonyms, aliases, normalized names, or paraphrases.\n"
+            "Every returned `table` and `column` must exactly match a provided schema entry.\n"
+            "If the question uses a synonym such as `secretary` but the schema uses `head`, "
+            "you must use the schema name `head`.\n"
+            "If the question implies a field but the exact column name is different, use the exact "
+            "schema column name.\n"
+            "If you are not sure which exact schema field matches, omit that filter or projection "
+            "instead of inventing a name."
         ),
         payload=payload,
         response_format=(

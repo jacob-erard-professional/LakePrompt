@@ -1,4 +1,6 @@
 import logging
+import re
+from difflib import SequenceMatcher
 from dataclasses import dataclass, replace
 
 from ._datalake import DataLake
@@ -7,6 +9,21 @@ from ._models import JoinPath, QueryFilter, QueryOrder, QueryPlan, QuerySelect
 from ._tracing import NULL_LOGGER, PipelineLogger
 
 logger = logging.getLogger(__name__)
+
+_INT_PATTERN = re.compile(r"^[+-]?\d+$")
+_FLOAT_PATTERN = re.compile(r"^[+-]?(?:\d+\.\d*|\.\d+)$")
+
+
+def _name_similarity(left: str | None, right: str | None) -> float:
+    if not left or not right:
+        return 0.0
+    left_norm = re.sub(r"[^a-z0-9]+", "_", left.lower()).strip("_")
+    right_norm = re.sub(r"[^a-z0-9]+", "_", right.lower()).strip("_")
+    if not left_norm or not right_norm:
+        return 0.0
+    if left_norm == right_norm:
+        return 1.0
+    return SequenceMatcher(None, left_norm, right_norm).ratio()
 
 
 def _quote_identifier(identifier: str) -> str:
@@ -170,14 +187,53 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
 
     select_clause = "SELECT *"
     projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
+    select_items = list(plan.projections)
+    projected_keys = {
+        (item.table, item.column, item.aggregation)
+        for item in select_items
+    }
+    for item in plan.order_by:
+        key = (item.table, item.column, item.aggregation)
+        if item.aggregation and key not in projected_keys:
+            select_items.append(
+                QuerySelect(
+                    table=item.table,
+                    column=item.column,
+                    aggregation=item.aggregation,
+                )
+            )
+            projected_keys.add(key)
     if plan.projections:
         projection_parts: list[str] = []
-        for idx, item in enumerate(plan.projections):
+        for idx, item in enumerate(select_items):
             alias = _select_alias(item, idx)
             projection_aliases[(item.table, item.column, item.aggregation)] = alias
             projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
         projection_sql = ", ".join(projection_parts)
         select_clause = f"SELECT {projection_sql}"
+    elif select_items:
+        projection_parts = []
+        grouped_aliases: set[str] = set()
+        for group_item in plan.group_by:
+            alias = group_item.split(".", 1)[-1]
+            projection_parts.append(
+                f"{_group_item_to_sql(group_item)} AS {_quote_identifier(alias)}"
+            )
+            grouped_aliases.add(alias)
+        for idx, item in enumerate(select_items):
+            alias = _select_alias(item, idx)
+            projection_aliases[(item.table, item.column, item.aggregation)] = alias
+            if alias in grouped_aliases:
+                continue
+            projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
+        select_clause = f"SELECT {', '.join(projection_parts)}"
+    elif plan.group_by:
+        group_projection_parts = [
+            f"{_group_item_to_sql(item)} AS {_quote_identifier(item.split('.', 1)[-1])}"
+            for item in plan.group_by
+        ]
+        if group_projection_parts:
+            select_clause = f"SELECT {', '.join(group_projection_parts)}"
 
     parts = [select_clause, from_clause]
 
@@ -186,7 +242,7 @@ def apply_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> str:
 
     if plan.group_by:
         group_items = list(plan.group_by)
-        for projection in plan.projections:
+        for projection in select_items:
             # Polars SQL is strict about grouped selects: every projected
             # non-aggregated column must appear in GROUP BY.
             if projection.aggregation:
@@ -388,13 +444,29 @@ class QueryPlanApplier:
         ]
 
         try:
-            plan = query_plan if query_plan is not None else plan_llm_query(question, sql, involved_cards)
-            plan = self._coerce_query_plan_types(plan, involved_cards)
-            refined_sql = apply_query_plan_to_sql(sql, plan)
+            raw_plan = query_plan if query_plan is not None else plan_llm_query(question, sql, involved_cards)
+            coerced_plan = self._coerce_query_plan_types(raw_plan, involved_cards)
+            sanitized_plan = self._sanitize_query_plan(coerced_plan, involved_cards)
+            refined_sql = apply_query_plan_to_sql(sql, sanitized_plan)
+            self.logger.log(
+                "query_plan_debug",
+                "Transformed query plan before SQL generation.",
+                {
+                    "path_id": path.path_id,
+                    "path_tables": path.tables,
+                    "raw_plan": raw_plan,
+                    "coerced_plan": coerced_plan,
+                    "sanitized_plan": sanitized_plan,
+                    "raw_filter_count": len(raw_plan.filters),
+                    "coerced_filter_count": len(coerced_plan.filters),
+                    "sanitized_filter_count": len(sanitized_plan.filters),
+                    "where_present_after_sanitize": bool(sanitized_plan.filters),
+                },
+            )
             self.logger.log(
                 "sql_refinement",
                 "Applied query plan to SQL.",
-                {"path_id": path.path_id, "query_plan": plan, "sql": refined_sql},
+                {"path_id": path.path_id, "query_plan": sanitized_plan, "sql": refined_sql},
             )
             return refined_sql
         except Exception as exc:  # noqa: BLE001
@@ -445,13 +517,19 @@ class QueryPlanApplier:
             return None
         if isinstance(value, list):
             return [self._coerce_value_to_dtype(item, dtype) for item in value]
+        if "string" in dtype and not isinstance(value, str):
+            return str(value)
         if not isinstance(value, str):
             return value
         normalized = value.strip()
         try:
             if "int" in dtype:
+                if not _INT_PATTERN.fullmatch(normalized):
+                    return value
                 return int(normalized)
             if "float" in dtype or "double" in dtype:
+                if not (_INT_PATTERN.fullmatch(normalized) or _FLOAT_PATTERN.fullmatch(normalized)):
+                    return value
                 return float(normalized)
             if "bool" in dtype:
                 lowered = normalized.lower()
@@ -460,3 +538,167 @@ class QueryPlanApplier:
         except ValueError:
             return value
         return value
+
+    def _sanitize_query_plan(
+        self,
+        plan: QueryPlan,
+        involved_cards,
+    ) -> QueryPlan:
+        """
+        Drop plan fragments that are unsupported or inconsistent with the
+        available path columns so malformed LLM plans degrade gracefully.
+        """
+        valid_refs = {
+            (card.table_name, card.column_name)
+            for card in involved_cards
+        }
+        cards_by_ref = {
+            (card.table_name, card.column_name): card
+            for card in involved_cards
+        }
+
+        def resolve_ref(
+            table: str | None,
+            column: str,
+            *,
+            value: object | None = None,
+        ) -> tuple[str | None, str] | None:
+            if "." in column:
+                split_table, split_column = column.split(".", 1)
+                table = split_table
+                column = split_column
+            if table is not None and (table, column) in valid_refs:
+                return table, column
+            if table is None:
+                matches = [(tbl, col) for tbl, col in valid_refs if col == column]
+                if len(matches) == 1:
+                    return matches[0]
+
+            best_ref: tuple[str, str] | None = None
+            best_score = 0.0
+            for ref, card in cards_by_ref.items():
+                score = 0.0
+                column_score = _name_similarity(column, card.column_name)
+                table_score = _name_similarity(table, card.table_name) if table else 0.0
+                score += column_score * 3.0
+                score += table_score
+                if value is not None and card.sample_values:
+                    normalized_value = str(value).strip().lower()
+                    sample_values = {str(item).strip().lower() for item in card.sample_values}
+                    if normalized_value and normalized_value in sample_values:
+                        score += 2.5
+                if column.lower() == card.column_name.lower():
+                    score += 1.5
+                if table and table.lower() == card.table_name.lower():
+                    score += 0.5
+                if score > best_score:
+                    best_score = score
+                    best_ref = ref
+            if best_ref is None or best_score < 1.75:
+                return None
+            return best_ref
+
+        def ground_filter(item: QueryFilter) -> QueryFilter:
+            resolved = resolve_ref(item.table, item.column, value=item.value)
+            if resolved is None:
+                return item
+            return replace(item, table=resolved[0], column=resolved[1])
+
+        def ground_select(item: QuerySelect) -> QuerySelect:
+            resolved = resolve_ref(item.table, item.column)
+            if resolved is None:
+                return item
+            return replace(item, table=resolved[0], column=resolved[1])
+
+        def ground_order(item: QueryOrder) -> QueryOrder:
+            resolved = resolve_ref(item.table, item.column)
+            if resolved is None:
+                return item
+            return replace(item, table=resolved[0], column=resolved[1])
+
+        def ground_group_item(item: str) -> str:
+            resolved = resolve_ref(None, item)
+            if resolved is None:
+                return item
+            table, column = resolved
+            return f"{table}.{column}" if table else column
+
+        filters_grounded = [ground_filter(item) for item in plan.filters]
+        projections_grounded = [ground_select(item) for item in plan.projections]
+        having_grounded = [ground_filter(item) for item in plan.having]
+        order_grounded = [ground_order(item) for item in plan.order_by]
+        group_grounded = [ground_group_item(item) for item in plan.group_by]
+        grouped_refs = {
+            tuple(item.split(".", 1)) if "." in item else (None, item)
+            for item in group_grounded
+        }
+        projected_raw_refs = {
+            (item.table, item.column)
+            for item in projections_grounded
+            if not item.aggregation
+        }
+
+        def has_valid_ref(table: str | None, column: str) -> bool:
+            if "." in column:
+                left, right = column.split(".", 1)
+                return (left, right) in valid_refs
+            if table is not None:
+                return (table, column) in valid_refs
+            return any(card_column == column for _, card_column in valid_refs)
+
+        def is_supported_filter(item: QueryFilter) -> bool:
+            if not has_valid_ref(item.table, item.column):
+                return False
+            value = item.value
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered.startswith("select ") or " join " in lowered or " from " in lowered:
+                    return False
+            if isinstance(value, list):
+                for child in value:
+                    if isinstance(child, str):
+                        lowered = child.strip().lower()
+                        if lowered.startswith("select ") or " join " in lowered or " from " in lowered:
+                            return False
+            return True
+
+        def is_supported_order(item: QueryOrder) -> bool:
+            if not has_valid_ref(item.table, item.column):
+                return False
+            if item.aggregation:
+                return True
+            if not (plan.group_by or any(select.aggregation for select in plan.projections)):
+                return True
+            ref = (item.table, item.column)
+            if "." in item.column:
+                ref = tuple(item.column.split(".", 1))
+            return ref in grouped_refs or ref in projected_raw_refs
+
+        filters = [item for item in filters_grounded if is_supported_filter(item)]
+        projections = [
+            item for item in projections_grounded
+            if has_valid_ref(item.table, item.column)
+        ]
+        having = [
+            item for item in having_grounded
+            if is_supported_filter(item) and (
+                (item.table, item.column) in grouped_refs
+                or (item.table, item.column) in projected_raw_refs
+                or ("." in item.column and tuple(item.column.split(".", 1)) in grouped_refs)
+            )
+        ]
+        order_by = [item for item in order_grounded if is_supported_order(item)]
+        group_by = [
+            item for item in group_grounded
+            if has_valid_ref(None, item)
+        ]
+        limit = plan.limit if isinstance(plan.limit, int) and plan.limit > 0 else None
+        return replace(
+            plan,
+            filters=filters,
+            projections=projections,
+            group_by=group_by,
+            having=having,
+            order_by=order_by,
+            limit=limit,
+        )

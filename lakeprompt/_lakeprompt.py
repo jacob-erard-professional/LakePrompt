@@ -1,5 +1,6 @@
 import json
 import os
+from collections import Counter, deque
 from hashlib import sha256
 from pathlib import Path
 
@@ -153,7 +154,8 @@ class LakePrompt:
             and cited evidence IDs when available.
         """
         cards = self.retriever.find_columns(question)
-        query_plan = self._plan_query(question, cards)
+        planning_cards = self._expand_cards_for_planning(cards)
+        query_plan = self._plan_query(question, planning_cards)
         paths = self.profiler.get_join_paths(cards, query_plan=query_plan)
         tuples = self.executor.get_tuples(question, paths, query_plan=query_plan)
         context = self.packager.build_context(question, tuples, query_plan=query_plan)
@@ -261,6 +263,64 @@ class LakePrompt:
             )
         except Exception:
             return QueryPlan()
+
+    def _expand_cards_for_planning(
+        self,
+        cards,
+        *,
+        max_hops: int = 2,
+        max_tables: int = 8,
+    ):
+        """
+        Expand planner-visible schema context from retrieved tables into the
+        nearby join graph so the LLM can see likely bridge/filter tables.
+        """
+        if not cards:
+            return []
+
+        seed_tables = [card.table_name for card in cards]
+        seed_counts = Counter(seed_tables)
+        selected_tables: list[str] = []
+        seen_tables: set[str] = set()
+
+        for table, _count in seed_counts.most_common():
+            if table in seen_tables:
+                continue
+            selected_tables.append(table)
+            seen_tables.add(table)
+            if len(selected_tables) >= max_tables:
+                break
+
+        frontier = deque((table, 0) for table in selected_tables)
+        while frontier and len(selected_tables) < max_tables:
+            table, depth = frontier.popleft()
+            if depth >= max_hops:
+                continue
+            for edge in self.lake.join_graph.get(table, []):
+                neighbor = edge["to_table"]
+                if neighbor in seen_tables:
+                    continue
+                selected_tables.append(neighbor)
+                seen_tables.add(neighbor)
+                frontier.append((neighbor, depth + 1))
+                if len(selected_tables) >= max_tables:
+                    break
+
+        expanded_cards = [
+            card
+            for table in selected_tables
+            for card in self.cards_by_table.get(table, [])
+        ]
+        self.logger.log(
+            "planning_columns",
+            "Expanded planner schema context from retrieved tables.",
+            {
+                "retrieved_tables": list(dict.fromkeys(seed_tables)),
+                "planner_tables": selected_tables,
+                "planner_column_count": len(expanded_cards),
+            },
+        )
+        return expanded_cards
 
     @staticmethod
     def _resolve_summary_cache_path(
