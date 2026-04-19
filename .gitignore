@@ -215,3 +215,5 @@ data/
 .cache/
 .pytest_cache/
 .lakeprompt_cache/
+
+.codex

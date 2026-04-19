@@ -1,5 +1,5 @@
-import logging
 import re
+import warnings
 from difflib import SequenceMatcher
 from dataclasses import dataclass, replace
 
@@ -7,8 +7,6 @@ from ._datalake import DataLake
 from ._llm_utilities import plan_llm_query
 from ._models import JoinPath, QueryFilter, QueryOrder, QueryPlan, QuerySelect
 from ._tracing import NULL_LOGGER, PipelineLogger
-
-logger = logging.getLogger(__name__)
 
 _INT_PATTERN = re.compile(r"^[+-]?\d+$")
 _FLOAT_PATTERN = re.compile(r"^[+-]?(?:\d+\.\d*|\.\d+)$")
@@ -397,7 +395,7 @@ class SqlBuilder:
 
         for tbl in tables:
             if tbl not in self.lake.tables:
-                logger.warning("Table '%s' not found in lake; skipping.", tbl)
+                warnings.warn(f"Table '{tbl}' not found in lake; skipping.", stacklevel=2)
                 table_cols[tbl] = []
                 continue
             cols = self.lake.get_sample(tbl, n=1).columns
@@ -470,8 +468,9 @@ class QueryPlanApplier:
             )
             return refined_sql
         except Exception as exc:  # noqa: BLE001
-            logger.warning(
-                "Query-plan application failed for path %s: %s", path.tables, exc
+            warnings.warn(
+                f"Query-plan application failed for path {path.tables}: {exc}",
+                stacklevel=2,
             )
             return sql
 

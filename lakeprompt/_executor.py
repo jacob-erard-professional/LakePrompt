@@ -1,5 +1,4 @@
-import logging
-logger = logging.getLogger(__name__)
+import warnings
 
 from dataclasses import dataclass
 from ._datalake import DataLake
@@ -137,10 +136,12 @@ class TupleExecutor:
         if query_plan is not None:
             required_tables = query_plan_tables(query_plan)
             if required_tables and not required_tables.issubset(set(path.tables)):
-                logger.warning(
-                    "Skipping path %s because it does not cover required query-plan tables %s.",
-                    path.tables,
-                    sorted(required_tables),
+                warnings.warn(
+                    (
+                        f"Skipping path {path.tables} because it does not cover "
+                        f"required query-plan tables {sorted(required_tables)}."
+                    ),
+                    stacklevel=2,
                 )
                 return [], ""
 
@@ -148,7 +149,7 @@ class TupleExecutor:
         try:
             sql = sql_builder.build_path_sql(path)
         except ValueError as exc:
-            logger.warning("Skipping malformed JoinPath: %s", exc)
+            warnings.warn(f"Skipping malformed JoinPath: {exc}", stacklevel=2)
             return [], ""
 
         if question or query_plan is not None:
@@ -160,13 +161,13 @@ class TupleExecutor:
         try:
             result_df = self.lake.query(sql)
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Query failed for path %s: %s", path.tables, exc)
+            warnings.warn(f"Query failed for path {path.tables}: {exc}", stacklevel=2)
             return [], _normalize_sql(sql)
 
         rows = result_df.to_dicts()
 
         if not rows:
-            logger.warning("Join path %s produced zero rows.", path.tables)
+            warnings.warn(f"Join path {path.tables} produced zero rows.", stacklevel=2)
 
         return rows, _normalize_sql(sql)
 

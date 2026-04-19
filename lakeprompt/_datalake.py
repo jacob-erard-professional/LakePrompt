@@ -163,7 +163,7 @@ class DataLake:
                 f"Table '{table_name}' not found. "
                 f"Available: {list(self.tables.keys())}"
             )
-        return self.tables[table_name].collect().head(n)
+        return self.tables[table_name].head(n).collect()
 
     def get_column_values(self, table_name: str, col: str) -> set:
         """

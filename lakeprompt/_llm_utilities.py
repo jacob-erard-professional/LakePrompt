@@ -679,37 +679,3 @@ def plan_llm_query(
     plan = plan if plan is not None else QueryPlan()
     logger.log("query_plan", "Parsed query plan.", plan)
     return plan
-
-
-def apply_llm_filters_to_sql(
-    question: str,
-    sql_query: str,
-    involved_cards: list[ColumnCard],
-    model: str = DEFAULT_CLAUDE_MODEL,
-    logger: PipelineLogger | None = None,
-) -> str:
-    """
-    Backward-compatible wrapper that preserves the old function signature.
-
-    This now extracts a structured `QueryPlan` first and leaves SQL assembly
-    to the executor so filter intent is inspectable before execution.
-
-    Args:
-        question: Original natural-language user question.
-        sql_query: Existing SQL query to refine.
-        involved_cards: Column metadata for the query's tables.
-        model: Anthropic model name.
-
-    Returns:
-        A refined SQL query string.
-    """
-    from ._executor import apply_query_plan_to_sql
-
-    plan = plan_llm_query(
-        question=question,
-        sql_query=sql_query,
-        involved_cards=involved_cards,
-        model=model,
-        logger=logger,
-    )
-    return apply_query_plan_to_sql(sql_query, plan)

@@ -1,10 +1,8 @@
-import logging
+import warnings
 from dataclasses import dataclass
 
 from ._datalake import DataLake
 from ._models import JoinPath
-
-logger = logging.getLogger(__name__)
 
 # model cache so SentenceTransformer is only loaded once per process.
 _ST_MODEL: object = None
@@ -32,8 +30,9 @@ class RowRanker:
         try:
             from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]
         except ImportError:
-            logger.warning(
-                "sentence-transformers not installed; card-similarity ranking unavailable."
+            warnings.warn(
+                "sentence-transformers not installed; card-similarity ranking unavailable.",
+                stacklevel=2,
             )
             return None
 

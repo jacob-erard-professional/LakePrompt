@@ -1,7 +1,6 @@
 import re
 from dataclasses import asdict
 
-from ._datalake import DataLake
 from ._models import JoinedTuple, LakeContext, QueryPlan
 from ._llm_utilities import _package_with_toon
 from ._tracing import NULL_LOGGER, PipelineLogger
@@ -10,6 +9,45 @@ from ._tracing import NULL_LOGGER, PipelineLogger
 _AGGREGATE_KEY_PATTERN = re.compile(
     r"^agg_\d+__(?P<aggregation>[a-z0-9]+)__(?:(?P<table>.+?)__)?(?P<column>.+)$"
 )
+
+
+def prettify_row_data_keys(row: dict) -> dict:
+    """
+    Rewrite internal row keys into prompt-friendly display names when safe.
+    """
+    pretty: dict[str, object] = {}
+    for key, value in row.items():
+        display_key = display_key_for_row_key(key, row)
+        if display_key in pretty:
+            display_key = key.replace("__", "_")
+        if display_key in pretty:
+            display_key = key
+        pretty[display_key] = value
+    return pretty
+
+
+def display_key_for_row_key(key: str, row: dict) -> str:
+    """
+    Convert one internal execution key into a readable display label.
+    """
+    aggregate_match = _AGGREGATE_KEY_PATTERN.match(key)
+    if aggregate_match:
+        aggregation = aggregate_match.group("aggregation")
+        column = aggregate_match.group("column")
+        return f"{aggregation}_{column}" if aggregation else column
+
+    if "__" not in key:
+        return key
+
+    table, column = key.split("__", 1)
+    sibling_columns = [
+        other.split("__", 1)[1]
+        for other in row
+        if other != key and "__" in other
+    ]
+    if column not in sibling_columns:
+        return column
+    return f"{table}_{column}"
 
 
 class ContextPackager:
@@ -21,15 +59,12 @@ class ContextPackager:
     faithfully from evidence.
 
     Args:
-        lake: The active DataLake instance (reserved for future use,
-            e.g. fetching additional rows if the budget allows).
         max_tokens: Soft upper bound on prompt length in tokens.
             Evidence rows are dropped from the tail until the prompt
             fits within this budget.
     """
 
-    def __init__(self, lake: DataLake, max_tokens: int = 3_000):
-        self.lake = lake
+    def __init__(self, max_tokens: int = 3_000):
         self.max_tokens = max_tokens
         self.logger: PipelineLogger = NULL_LOGGER
 
@@ -77,17 +112,18 @@ class ContextPackager:
             payload={"question": question, "evidence": evidence_payload},
             response_format='{"answer":"Plain-text answer here","cited_ids":["id1","id2"]}',
         )
+        token_count = self._estimate_tokens(prompt)
         self.logger.log(
             "prompt_context",
             "Built prompt context.",
-            {"question": question, "evidence": evidence_payload, "token_count": self._estimate_tokens(prompt)},
+            {"question": question, "evidence": evidence_payload, "token_count": token_count},
         )
 
         return LakeContext(
             question=question,
             evidence=included,
             prompt=prompt,
-            token_count=self._estimate_tokens(prompt),
+            token_count=token_count,
         )
 
     def _fit_to_budget(
@@ -158,45 +194,30 @@ class ContextPackager:
         mapping back to internal execution keys.
         """
         projected = self._project_row_data(row, query_plan)
-        display_data: dict[str, object] = {}
+        display_data = prettify_row_data_keys(projected)
         field_map: dict[str, str] = {}
-
-        for key, value in projected.items():
-            display_key = self._display_key_for_row_key(key, projected)
-            if display_key in display_data:
-                display_key = key.replace("__", "_")
-            if display_key in display_data:
-                display_key = key
-            display_data[display_key] = value
-            field_map[display_key] = key
+        used_internal: set[str] = set()
+        for display_key, value in display_data.items():
+            for key, projected_value in projected.items():
+                if key in used_internal:
+                    continue
+                if projected_value == value and display_key == display_key_for_row_key(key, projected):
+                    field_map[display_key] = key
+                    used_internal.add(key)
+                    break
+            if display_key not in field_map:
+                for key, projected_value in projected.items():
+                    if key in used_internal:
+                        continue
+                    if projected_value == value:
+                        field_map[display_key] = key
+                        used_internal.add(key)
+                        break
 
         return {
             "data": display_data,
             "field_map": field_map,
         }
-
-    def _display_key_for_row_key(self, key: str, row: dict) -> str:
-        """
-        Convert internal row keys into prompt-friendly labels.
-        """
-        aggregate_match = _AGGREGATE_KEY_PATTERN.match(key)
-        if aggregate_match:
-            aggregation = aggregate_match.group("aggregation")
-            column = aggregate_match.group("column")
-            return f"{aggregation}_{column}" if aggregation else column
-
-        if "__" not in key:
-            return key
-
-        table, column = key.split("__", 1)
-        sibling_columns = [
-            other.split("__", 1)[1]
-            for other in row
-            if other != key and "__" in other
-        ]
-        if column not in sibling_columns:
-            return column
-        return f"{table}_{column}"
 
     def _relevant_row_keys(self, query_plan: QueryPlan, row: dict) -> list[str]:
         """

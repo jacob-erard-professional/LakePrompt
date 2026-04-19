@@ -80,13 +80,13 @@ class LakePrompt:
         self.logger.log("table_summaries", "Generated table summaries.", summaries)
 
         # 4. Embed cards and build HNSW index
-        self.retriever = SemanticRetriever(self.lake, self.cards_by_table, logger=self.logger)
+        self.retriever = SemanticRetriever(self.cards_by_table, logger=self.logger)
         self.retriever.build_index()
 
         # 5. Initialise remaining pipeline modules
         self.model = model
         self.executor = TupleExecutor(self.lake, logger=self.logger)
-        self.packager = ContextPackager(self.lake)
+        self.packager = ContextPackager()
         self.packager.logger = self.logger
 
     @classmethod

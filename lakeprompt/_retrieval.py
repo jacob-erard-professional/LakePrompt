@@ -2,7 +2,6 @@ import numpy as np
 import hnswlib
 from sentence_transformers import SentenceTransformer
 
-from ._datalake import DataLake
 from ._models import ColumnCard
 from ._tracing import NULL_LOGGER, PipelineLogger
 
@@ -23,27 +22,24 @@ class SemanticRetriever:
     DataProfiler.get_join_paths() and TupleExecutor.
 
     Args:
-        lake: The shared DataLake instance.
         cards_by_table: Dictionary mapping table name to its ColumnCards,
             as produced by DataProfiler.profile_lake().
         model_name: SBERT model to use for embedding. Defaults to
             'all-MiniLM-L6-v2', a fast and capable general-purpose model.
 
     Example:
-        >>> retriever = SemanticRetriever(lake, cards_by_table)
+        >>> retriever = SemanticRetriever(cards_by_table)
         >>> retriever.build_index()
         >>> cards = retriever.find_columns("customers in Denver")
     """
 
     def __init__(
         self,
-        lake: DataLake,
         cards_by_table: dict[str, list[ColumnCard]],
         model_name: str = "all-MiniLM-L6-v2",
         score_window: float = 0.08,
         logger: PipelineLogger | None = None,
     ):
-        self.lake = lake
         self.cards_by_table = cards_by_table
         self.model = SentenceTransformer(model_name)
         self.index = None
