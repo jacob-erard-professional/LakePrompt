@@ -1,9 +1,15 @@
+import re
 from dataclasses import asdict
 
 from ._datalake import DataLake
 from ._models import JoinedTuple, LakeContext, QueryPlan
 from ._llm_utilities import _package_with_toon
 from ._tracing import NULL_LOGGER, PipelineLogger
+
+
+_AGGREGATE_KEY_PATTERN = re.compile(
+    r"^agg_\d+__(?P<aggregation>[a-z0-9]+)__(?:(?P<table>.+?)__)?(?P<column>.+)$"
+)
 
 
 class ContextPackager:
@@ -57,7 +63,7 @@ class ContextPackager:
             {
                 "id": t.evidence_id,
                 "provenance": asdict(t.provenance),
-                "data": self._project_row_data(t.data, query_plan),
+                **self._display_row_payload(t.data, query_plan),
             }
             for t in included
         ]
@@ -141,6 +147,56 @@ class ContextPackager:
 
         projected = {key: row[key] for key in relevant_keys if key in row}
         return projected if projected else row
+
+    def _display_row_payload(
+        self,
+        row: dict,
+        query_plan: QueryPlan | None,
+    ) -> dict:
+        """
+        Return prompt-facing row data with readable field names plus a stable
+        mapping back to internal execution keys.
+        """
+        projected = self._project_row_data(row, query_plan)
+        display_data: dict[str, object] = {}
+        field_map: dict[str, str] = {}
+
+        for key, value in projected.items():
+            display_key = self._display_key_for_row_key(key, projected)
+            if display_key in display_data:
+                display_key = key.replace("__", "_")
+            if display_key in display_data:
+                display_key = key
+            display_data[display_key] = value
+            field_map[display_key] = key
+
+        return {
+            "data": display_data,
+            "field_map": field_map,
+        }
+
+    def _display_key_for_row_key(self, key: str, row: dict) -> str:
+        """
+        Convert internal row keys into prompt-friendly labels.
+        """
+        aggregate_match = _AGGREGATE_KEY_PATTERN.match(key)
+        if aggregate_match:
+            aggregation = aggregate_match.group("aggregation")
+            column = aggregate_match.group("column")
+            return f"{aggregation}_{column}" if aggregation else column
+
+        if "__" not in key:
+            return key
+
+        table, column = key.split("__", 1)
+        sibling_columns = [
+            other.split("__", 1)[1]
+            for other in row
+            if other != key and "__" in other
+        ]
+        if column not in sibling_columns:
+            return column
+        return f"{table}_{column}"
 
     def _relevant_row_keys(self, query_plan: QueryPlan, row: dict) -> list[str]:
         """

@@ -130,10 +130,12 @@ class LakeAnswer:
         text: Final answer text.
         evidence: Evidence rows supporting the answer.
         cited_ids: Evidence IDs cited by the model when available.
+        prompt: Final prompt string sent to the model when available.
     """
     text: str
     evidence: list[JoinedTuple]
     cited_ids: list[str] = field(default_factory=list)
+    prompt: str = ""
 
 
 @dataclass(frozen=True)

@@ -164,6 +164,7 @@ class LakePrompt:
                 text="Could not find evidence in the data lake",
                 evidence=[],
                 cited_ids=[],
+                prompt=context.prompt,
             )
         answer_text, cited_ids = self._llm_complete(
             context.prompt,
@@ -174,6 +175,7 @@ class LakePrompt:
             text=answer_text,
             evidence=context.evidence,
             cited_ids=cited_ids,
+            prompt=context.prompt,
         )
 
     def _llm_complete(
