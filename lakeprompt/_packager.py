@@ -1,3 +1,4 @@
+import json
 import re
 from dataclasses import asdict
 
@@ -93,30 +94,13 @@ class ContextPackager:
             evidence rows, and an estimated token count.
         """
         included = self._fit_to_budget(question, tuples, query_plan=query_plan)
-
-        evidence_payload = [
-            {
-                "id": t.evidence_id,
-                "provenance": asdict(t.provenance),
-                **self._display_row_payload(t.data, query_plan, t.output_columns),
-            }
-            for t in included
-        ]
-
-        prompt = _package_with_toon(
-            task=(
-                "Answer the question using only the provided evidence rows "
-                "from the data lake. Cite the evidence IDs that support "
-                "your answer."
-            ),
-            payload={"question": question, "evidence": evidence_payload},
-            response_format='{"answer":"Plain-text answer here","cited_ids":["id1","id2"]}',
-        )
+        payload = self._build_prompt_payload(question, included, query_plan)
+        prompt = self._render_prompt(payload)
         token_count = self._estimate_tokens(prompt)
         self.logger.log(
             "prompt_context",
             "Built prompt context.",
-            {"question": question, "evidence": evidence_payload, "token_count": token_count},
+            {"question": question, "evidence": payload, "token_count": token_count},
         )
 
         return LakeContext(
@@ -156,15 +140,114 @@ class ContextPackager:
         included: list[JoinedTuple] = []
         for t in tuples:
             candidate = included + [t]
-            overhead = self._estimate_tokens(question) + len(candidate) * 10
-            data_tokens = sum(
-                self._estimate_tokens(str(self._project_row_data(c.data, query_plan, c.output_columns))) for c in candidate
-            )
-            if included and overhead + data_tokens > self.max_tokens:
+            payload = self._build_prompt_payload(question, candidate, query_plan)
+            token_count = self._estimate_tokens(self._render_prompt(payload))
+            if included and token_count > self.max_tokens:
                 break
             included = candidate
 
         return included
+
+    def _build_prompt_payload(
+        self,
+        question: str,
+        tuples: list[JoinedTuple],
+        query_plan: QueryPlan | None,
+    ) -> dict[str, object]:
+        """
+        Build a compact prompt payload with shared provenance and schemas.
+        """
+        source_ids: dict[str, str] = {}
+        sources: list[dict[str, object]] = []
+        schema_ids: dict[str, str] = {}
+        schemas: list[dict[str, object]] = []
+        groups_by_key: dict[tuple[str, str, tuple[str, ...]], dict[str, object]] = {}
+        evidence_groups: list[dict[str, object]] = []
+
+        for tuple_ in tuples:
+            row_payload = self._display_row_payload(
+                tuple_.data,
+                query_plan,
+                tuple_.output_columns,
+            )
+            display_data = row_payload["data"]
+            field_map = row_payload["field_map"]
+
+            source_key = json.dumps(
+                asdict(tuple_.provenance),
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            source_id = source_ids.get(source_key)
+            if source_id is None:
+                source_id = f"S{len(sources) + 1}"
+                source_ids[source_key] = source_id
+                sources.append(
+                    {
+                        "id": source_id,
+                        "path_id": tuple_.provenance.path_id,
+                        "tables": tuple_.provenance.tables,
+                        "join_keys": tuple_.provenance.join_keys,
+                        "path_score": tuple_.provenance.path_score,
+                        "sql": tuple_.provenance.sql,
+                    }
+                )
+
+            schema_key = json.dumps(
+                field_map,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            schema_id = schema_ids.get(schema_key)
+            if schema_id is None:
+                schema_id = f"C{len(schemas) + 1}"
+                schema_ids[schema_key] = schema_id
+                schemas.append({"id": schema_id, "field_map": field_map})
+
+            group_key = (
+                source_id,
+                schema_id,
+                tuple(display_data.keys()),
+            )
+            group = groups_by_key.get(group_key)
+            if group is None:
+                group = {
+                    "source": source_id,
+                    "schema": schema_id,
+                    "rows": [],
+                }
+                groups_by_key[group_key] = group
+                evidence_groups.append(group)
+
+            row = {"id": tuple_.evidence_id}
+            row.update(display_data)
+            group["rows"].append(row)
+
+        payload: dict[str, object] = {
+            "question": question,
+            "sources": sources,
+            "evidence_groups": evidence_groups,
+        }
+        if schemas:
+            payload["schemas"] = schemas
+        return payload
+
+    @staticmethod
+    def _render_prompt(payload: dict[str, object]) -> str:
+        """
+        Render the final model prompt from a structured payload.
+        """
+        return _package_with_toon(
+            task=(
+                "Answer the question using only the evidence rows. "
+                "Use sources and schemas only as metadata. Cite the "
+                "supporting evidence row IDs."
+            ),
+            payload=payload,
+            response_format='{"answer":"Plain-text answer here","cited_ids":["id1","id2"]}',
+        )
 
     def _project_row_data(
         self,
