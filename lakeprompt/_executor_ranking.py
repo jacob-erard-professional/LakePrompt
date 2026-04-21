@@ -1,4 +1,6 @@
+import io
 import warnings
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
 
 from ._datalake import DataLake
@@ -6,6 +8,17 @@ from ._models import JoinPath
 
 # model cache so SentenceTransformer is only loaded once per process.
 _ST_MODEL: object = None
+
+
+def _load_sentence_transformer(model_name: str):
+    """
+    Load a sentence-transformer model while suppressing library startup noise.
+    """
+    from sentence_transformers import SentenceTransformer  # type: ignore[import-untyped]
+
+    sink = io.StringIO()
+    with redirect_stdout(sink), redirect_stderr(sink):
+        return SentenceTransformer(model_name)
 
 
 @dataclass
@@ -37,7 +50,7 @@ class RowRanker:
             return None
 
         if _ST_MODEL is None:
-            _ST_MODEL = SentenceTransformer("all-MiniLM-L6-v2")
+            _ST_MODEL = _load_sentence_transformer("all-MiniLM-L6-v2")
 
         return _ST_MODEL.encode(question, normalize_embeddings=True)  # type: ignore[union-attr]
 

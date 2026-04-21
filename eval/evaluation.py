@@ -6,7 +6,6 @@ import json
 import os
 import random
 import re
-import sqlite3
 import sys
 import time
 from collections import Counter
@@ -16,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
-import polars as pl
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -175,6 +173,7 @@ class ConditionResult:
     evidence_count: int
     join_count: int
     context_tokens: int  # whitespace-token count of serialized evidence lines only
+    raw_response: str = ""
     prompt_tokens: int = 0  # whitespace-token count of the full prompt sent to the LLM
     cited_ids: list[str] = field(default_factory=list)
     generated_sql: list[str] = field(default_factory=list)
@@ -380,7 +379,12 @@ class SpiderJoinEvaluation:
         )
         if expected_sql.strip():
             try:
-                example.ground_truth = self._execute_expected_sql(schema_dir, expected_sql)
+                example.ground_truth = self._execute_expected_sql(
+                    schema_dir=schema_dir,
+                    sql=expected_sql,
+                    lakeprompt_model=lakeprompt_model,
+                    cache_path=cache_path,
+                )
                 example.ground_truth_error = None
             except Exception as exc:  # noqa: BLE001
                 example.ground_truth_error = str(exc)
@@ -410,37 +414,12 @@ class SpiderJoinEvaluation:
 
         return example
 
-    def _load_csvs_into_sqlite(
-        self,
-        conn: sqlite3.Connection,
-        schema_dir: Path,
-    ) -> None:
-        for csv_path in sorted(schema_dir.glob("*.csv")):
-            table_name = csv_path.stem
-            with csv_path.open(newline="", encoding="utf-8") as handle:
-                reader = csv.reader(handle)
-                try:
-                    headers = next(reader)
-                except StopIteration:
-                    continue
-                quoted_columns = [f'"{header}" TEXT' for header in headers]
-                conn.execute(f'DROP TABLE IF EXISTS "{table_name}"')
-                conn.execute(f'CREATE TABLE "{table_name}" ({", ".join(quoted_columns)})')
-                placeholders = ", ".join("?" for _ in headers)
-                insert_sql = f'INSERT INTO "{table_name}" VALUES ({placeholders})'
-                rows = [tuple(row) for row in reader]
-                if rows:
-                    conn.executemany(insert_sql, rows)
-        conn.commit()
-
-    def _canonical_ground_truth(self, cursor: sqlite3.Cursor) -> str:
-        columns = [desc[0] for desc in cursor.description or []]
-        rows = cursor.fetchall()
-
-        if not columns:
+    def _canonical_ground_truth(self, rows: list[dict[str, Any]]) -> str:
+        if not rows:
             return ""
+        columns = list(rows[0].keys())
         if len(columns) == 1:
-            values = [row[0] for row in rows]
+            values = [row[columns[0]] for row in rows]
             if not values:
                 return ""
             if len(values) == 1:
@@ -448,21 +427,38 @@ class SpiderJoinEvaluation:
             return json.dumps(values, ensure_ascii=True)
 
         payload = [
-            {column: value for column, value in zip(columns, row, strict=False)}
+            {column: row[column] for column in columns}
             for row in rows
         ]
         if not payload:
             return ""
         return json.dumps(payload, ensure_ascii=True, sort_keys=True)
 
-    def _execute_expected_sql(self, schema_dir: Path, sql: str) -> str:
-        conn = sqlite3.connect(":memory:")
-        try:
-            self._load_csvs_into_sqlite(conn, schema_dir)
-            cursor = conn.execute(sql)
-            return self._canonical_ground_truth(cursor)
-        finally:
-            conn.close()
+    def _execute_expected_sql(
+        self,
+        *,
+        schema_dir: Path,
+        sql: str,
+        lakeprompt_model: str,
+        cache_path: str | None,
+    ) -> str:
+        lp = self._get_lakeprompt(schema_dir, lakeprompt_model, cache_path)
+        return self._canonical_ground_truth(lp.execute_sql(sql))
+
+    def _read_csv_rows(
+        self,
+        csv_path: Path,
+        sample_rows: int | None = None,
+    ) -> tuple[list[str], list[dict[str, str]]]:
+        with csv_path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            columns = list(reader.fieldnames or [])
+            rows: list[dict[str, str]] = []
+            for idx, row in enumerate(reader):
+                if sample_rows is not None and idx >= sample_rows:
+                    break
+                rows.append(dict(row))
+        return columns, rows
 
     def _load_question_items(self, questions_path: Path) -> list[dict[str, str]]:
         if not questions_path.exists():
@@ -539,6 +535,7 @@ class SpiderJoinEvaluation:
             evidence_count=0,
             join_count=0,
             context_tokens=0,
+            raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
             error=error,
         )
@@ -580,6 +577,7 @@ class SpiderJoinEvaluation:
             evidence_count=sample_rows,
             join_count=0,
             context_tokens=context_tokens,
+            raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
             error=error,
         )
@@ -618,6 +616,7 @@ class SpiderJoinEvaluation:
             evidence_count=sample_rows,
             join_count=0,
             context_tokens=context_tokens,
+            raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
             error=error,
         )
@@ -644,6 +643,7 @@ class SpiderJoinEvaluation:
             evidence_count=0,
             join_count=0,
             context_tokens=context_tokens,
+            raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
             error=error,
         )
@@ -687,6 +687,7 @@ class SpiderJoinEvaluation:
                 condition="lakeprompt_ranked",
                 prompt=result.prompt or ranked_prompt,
                 answer=result.text,
+                raw_response=result.raw_response or result.text,
                 latency_seconds=round(time.monotonic() - start, 3),
                 evidence_count=len(result.evidence),
                 join_count=joins,
@@ -719,6 +720,7 @@ class SpiderJoinEvaluation:
                 condition="join_no_ranking",
                 prompt=shuffled_prompt,
                 answer=shuffled_answer,
+                raw_response=shuffled_answer,
                 latency_seconds=round(time.monotonic() - start, 3),
                 evidence_count=len(shuffled_evidence),
                 join_count=shuffled_joins,
@@ -734,6 +736,7 @@ class SpiderJoinEvaluation:
                 condition="lakeprompt_ranked",
                 prompt="",
                 answer="",
+                raw_response="",
                 latency_seconds=elapsed,
                 evidence_count=0,
                 join_count=0,
@@ -747,6 +750,7 @@ class SpiderJoinEvaluation:
                 condition="join_no_ranking",
                 prompt="",
                 answer="",
+                raw_response="",
                 latency_seconds=elapsed,
                 evidence_count=0,
                 join_count=0,
@@ -787,14 +791,14 @@ class SpiderJoinEvaluation:
         best_score = -1
         best_text = ""
         for csv_path in sorted(schema_dir.glob("*.csv")):
-            df = pl.read_csv(csv_path, n_rows=sample_rows)
-            col_tokens = set(" ".join(df.columns).lower().split())
+            columns, rows = self._read_csv_rows(csv_path, sample_rows)
+            col_tokens = set(" ".join(columns).lower().split())
             score = len(question_tokens & col_tokens)
             if score > best_score:
                 best_score = score
                 rows_text = f"Table: {csv_path.stem}\n"
                 rows_text += "\n".join(
-                    json.dumps(row, default=str, sort_keys=True) for row in df.to_dicts()
+                    json.dumps(row, default=str, sort_keys=True) for row in rows
                 )
                 best_text = rows_text
         return best_text or "[no tables found]"
@@ -803,10 +807,10 @@ class SpiderJoinEvaluation:
         """Return sample rows from every table in the schema, concatenated."""
         sections: list[str] = []
         for csv_path in sorted(schema_dir.glob("*.csv")):
-            df = pl.read_csv(csv_path, n_rows=sample_rows)
+            _columns, rows = self._read_csv_rows(csv_path, sample_rows)
             section = f"Table: {csv_path.stem}\n"
             section += "\n".join(
-                json.dumps(row, default=str, sort_keys=True) for row in df.to_dicts()
+                json.dumps(row, default=str, sort_keys=True) for row in rows
             )
             sections.append(section)
         return "\n\n".join(sections) or "[no tables found]"
@@ -852,12 +856,12 @@ class SpiderJoinEvaluation:
     def _build_schema_description(self, schema_dir: Path, sample_rows: int) -> str:
         sections: list[str] = []
         for csv_path in sorted(schema_dir.glob("*.csv")):
-            df = pl.read_csv(csv_path, n_rows=sample_rows)
+            columns, rows = self._read_csv_rows(csv_path, sample_rows)
             sections.append(f"Table: {csv_path.stem}")
-            sections.append(f"Columns: {', '.join(df.columns)}")
-            if df.height:
+            sections.append(f"Columns: {', '.join(columns)}")
+            if rows:
                 sections.append("Sample rows:")
-                for row in df.to_dicts():
+                for row in rows:
                     sections.append(json.dumps(row, default=str, sort_keys=True))
             sections.append("")
         return "\n".join(sections).strip()
@@ -939,7 +943,8 @@ class SpiderJoinEvaluation:
         return {
             "baseline_name": condition.condition,
             "exact_prompt_sent_via_api": condition.prompt,
-            "response_from_claude": condition.answer,
+            "response_from_claude": condition.raw_response or condition.answer,
+            "parsed_answer": condition.answer,
             "generated_sql": condition.generated_sql,
             "scoring_metrics": {
                 "exact_match": condition.exact_match,
@@ -1157,6 +1162,15 @@ class SpiderJoinEvaluation:
                     "```",
                     "",
                 ])
+                if cond.get("parsed_answer") and cond.get("parsed_answer") != cond.get("response_from_claude"):
+                    lines.extend([
+                        "**Parsed Answer Used For Scoring**",
+                        "",
+                        "```text",
+                        cond["parsed_answer"],
+                        "```",
+                        "",
+                    ])
                 lines.extend([
                     "**Scoring Metrics**",
                     "",

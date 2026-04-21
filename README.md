@@ -1,6 +1,6 @@
 # LakePrompt
 
-LakePrompt is a Python research prototype for answering natural-language questions over a data lake of CSV files. It profiles columns, retrieves relevant schema signals, plans joins, executes SQL over Polars, packages evidence for an LLM, and returns grounded answers with citations.
+LakePrompt is a Python research prototype for answering natural-language questions over a data lake of CSV files. It profiles columns, retrieves relevant schema signals, plans joins, executes SQL over a local SQLite database, packages evidence for an LLM, and returns grounded answers with citations.
 
 The repository currently includes:
 
@@ -37,7 +37,7 @@ The current pipeline supports:
   - namespace-aware pruning for Spider-style multi-database lakes
   - plan-aware path validation
   - single-table short-circuiting when no join is required
-- deterministic SQL generation for Polars SQL from `QueryPlan`
+- deterministic SQL generation for SQLite from `QueryPlan`
 - typed filter coercion before execution
 - aggregate-aware output metadata so selected aggregate fields survive into evidence packaging
 - row-level evidence ranking and diversity filtering
@@ -74,7 +74,7 @@ Important files and directories:
 Important package modules:
 
 - `lakeprompt/_lakeprompt.py`: public `LakePrompt` orchestration
-- `lakeprompt/_datalake.py`: CSV loading and Polars SQL execution
+- `lakeprompt/_datalake.py`: CSV loading and local SQLite execution
 - `lakeprompt/_ingest.py`: remote-source preparation and caching
 - `lakeprompt/_profiler.py`: profiling, join discovery, and join-path ranking
 - `lakeprompt/_retrieval.py`: semantic retrieval over `ColumnCard`s
@@ -103,6 +103,7 @@ Main entry points:
 - `text`
 - `evidence`
 - `cited_ids`
+- `raw_response`
 - `prompt`
 
 ## Setup

@@ -158,20 +158,20 @@ class TupleExecutor:
             warnings.warn(f"Skipping malformed JoinPath: {exc}", stacklevel=2)
             return [], "", []
 
-        output_columns: list[OutputColumn] = []
         if question or query_plan is not None:
             plan_applier = QueryPlanApplier(self.lake, logger=self.logger)
+            output_columns: list[OutputColumn]
             sql, output_columns = plan_applier.apply(question, sql, path, query_plan=query_plan)
+        else:
+            sql, output_columns = sql_builder.compile_path_sql(path, QueryPlan())
 
         self.logger.log("sql_query", "Executing SQL query.", {"path_id": path.path_id, "sql": sql})
 
         try:
-            result_df = self.lake.query(sql)
+            rows = self.lake.query(sql)
         except Exception as exc:  # noqa: BLE001
             warnings.warn(f"Query failed for path {path.tables}: {exc}", stacklevel=2)
             return [], _normalize_sql(sql), output_columns
-
-        rows = result_df.to_dicts()
 
         if not rows:
             warnings.warn(f"Join path {path.tables} produced zero rows.", stacklevel=2)

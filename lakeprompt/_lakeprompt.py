@@ -1,8 +1,10 @@
 import json
 import os
+import re
 from collections import Counter, deque
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 
 import anthropic
 
@@ -154,9 +156,22 @@ class LakePrompt:
             and cited evidence IDs when available.
         """
         cards = self.retriever.find_columns(question)
-        planning_cards = self._expand_cards_for_planning(cards)
+        planning_cards = self._expand_cards_for_planning(question, cards)
         query_plan = self._plan_query(question, planning_cards)
-        paths = self.profiler.get_join_paths(cards, query_plan=query_plan)
+        retrieved_tables = {card.table_name for card in cards}
+        bridge_tables = []
+        seen_bridge_tables: set[str] = set()
+        for card in planning_cards:
+            table = card.table_name
+            if table in retrieved_tables or table in seen_bridge_tables:
+                continue
+            seen_bridge_tables.add(table)
+            bridge_tables.append(table)
+        paths = self.profiler.get_join_paths(
+            cards,
+            query_plan=query_plan,
+            bridge_tables=set(bridge_tables),
+        )
         tuples = self.executor.get_tuples(question, paths, query_plan=query_plan)
         context = self.packager.build_context(question, tuples, query_plan=query_plan)
         if not context.evidence:
@@ -164,9 +179,10 @@ class LakePrompt:
                 text="Could not find evidence in the data lake",
                 evidence=[],
                 cited_ids=[],
+                raw_response="Could not find evidence in the data lake",
                 prompt=context.prompt,
             )
-        answer_text, cited_ids = self._llm_complete(
+        answer_text, cited_ids, raw_response = self._llm_complete(
             context.prompt,
             valid_ids={item.evidence_id for item in context.evidence},
         )
@@ -175,14 +191,30 @@ class LakePrompt:
             text=answer_text,
             evidence=context.evidence,
             cited_ids=cited_ids,
+            raw_response=raw_response,
             prompt=context.prompt,
         )
+
+    def execute_sql(self, sql: str) -> list[dict[str, Any]]:
+        """
+        Execute raw SQL against the already-loaded lake.
+
+        This is useful for evaluation and debugging paths that need direct
+        access to the underlying database without rebuilding the schema.
+        """
+        return self.lake.query(sql)
+
+    def execute_sql_rows(self, sql: str) -> list[dict[str, Any]]:
+        """
+        Execute raw SQL and return the result as JSON-friendly row dicts.
+        """
+        return self.execute_sql(sql)
 
     def _llm_complete(
         self,
         prompt: str,
         valid_ids: set[str] | None = None,
-    ) -> tuple[str, list[str]]:
+    ) -> tuple[str, list[str], str]:
         """
         Send a packaged prompt to the LLM and return the answer text plus citations.
 
@@ -200,7 +232,7 @@ class LakePrompt:
                 returned citation list.
 
         Returns:
-            A tuple of `(answer_text, cited_ids)`.
+            A tuple of `(answer_text, cited_ids, raw_response)`.
         """
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
@@ -233,9 +265,9 @@ class LakePrompt:
                 item for item in cited_ids
                 if isinstance(item, str) and (valid_ids is None or item in valid_ids)
             ]
-            return answer_text, normalized_ids
+            return answer_text, normalized_ids, raw
         except json.JSONDecodeError:
-            return raw, []
+            return raw, [], raw
 
     def _plan_query(self, question: str, cards) -> QueryPlan:
         """
@@ -268,10 +300,11 @@ class LakePrompt:
 
     def _expand_cards_for_planning(
         self,
+        question: str,
         cards,
         *,
-        max_hops: int = 2,
-        max_tables: int = 8,
+        max_hops: int = 4,
+        max_tables: int = 12,
     ):
         """
         Expand planner-visible schema context from retrieved tables into the
@@ -293,15 +326,26 @@ class LakePrompt:
             if len(selected_tables) >= max_tables:
                 break
 
+        question_tokens = self._planning_tokens(question)
         frontier = deque((table, 0) for table in selected_tables)
         while frontier and len(selected_tables) < max_tables:
             table, depth = frontier.popleft()
             if depth >= max_hops:
                 continue
+            candidate_neighbors = []
             for edge in self.lake.join_graph.get(table, []):
                 neighbor = edge["to_table"]
                 if neighbor in seen_tables:
                     continue
+                candidate_neighbors.append(neighbor)
+            candidate_neighbors.sort(
+                key=lambda neighbor: self._planner_table_priority(
+                    neighbor,
+                    question_tokens=question_tokens,
+                ),
+                reverse=True,
+            )
+            for neighbor in candidate_neighbors:
                 selected_tables.append(neighbor)
                 seen_tables.add(neighbor)
                 frontier.append((neighbor, depth + 1))
@@ -323,6 +367,38 @@ class LakePrompt:
             },
         )
         return expanded_cards
+
+    def _planner_table_priority(
+        self,
+        table_name: str,
+        *,
+        question_tokens: set[str],
+    ) -> tuple[int, int, int]:
+        """
+        Rank candidate planner tables by question relevance and table utility.
+        """
+        cards = self.cards_by_table.get(table_name, [])
+        table_tokens = self._planning_tokens(table_name.replace("__", " "))
+        column_tokens = {
+            token
+            for card in cards
+            for token in self._planning_tokens(card.column_name)
+        }
+        direct_overlap = len(question_tokens & table_tokens)
+        column_overlap = len(question_tokens & column_tokens)
+        id_bonus = sum(
+            1 for card in cards
+            if card.column_name.lower() in {"driverid", "raceid", "circuitid", "constructorid"}
+        )
+        return (direct_overlap, column_overlap, id_bonus)
+
+    @staticmethod
+    def _planning_tokens(text: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[a-z0-9]+", text.lower())
+            if token
+        }
 
     @staticmethod
     def _resolve_summary_cache_path(

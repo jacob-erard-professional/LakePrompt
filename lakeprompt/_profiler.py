@@ -41,11 +41,12 @@ class LakeProfiler:
         cards_by_table: dict[str, list[ColumnCard]] = {}
 
         for table_name in self.lake.tables:
-            sample_df = self.lake.get_sample(table_name, n=100)
+            sample_rows = self.lake.get_sample(table_name, n=100)
             cards: list[ColumnCard] = []
-            for column_name in sample_df.columns:
-                series = sample_df[column_name]
-                cards.append(self._build_column_card(table_name, column_name, series))
+            for column_name in self.lake.get_table_columns(table_name):
+                values = [row.get(column_name) for row in sample_rows]
+                dtype = self.lake.get_column_dtype(table_name, column_name)
+                cards.append(self._build_column_card(table_name, column_name, values, dtype))
             cards_by_table[table_name] = cards
 
         self.cards_by_table = cards_by_table
@@ -65,7 +66,13 @@ class LakeProfiler:
         )
         return cards_by_table
     
-    def _build_column_card(self, table_name: str, column_name: str, series) -> ColumnCard:
+    def _build_column_card(
+        self,
+        table_name: str,
+        column_name: str,
+        values: list[object],
+        dtype: str,
+    ) -> ColumnCard:
         """
         Build a single `ColumnCard` from one sampled column.
 
@@ -75,14 +82,15 @@ class LakeProfiler:
         Args:
             table_name: Name of the table the column belongs to.
             col_name: Name of the column.
-            series: The pandas Series for that column.
+            values: Sampled values for that column.
+            dtype: Inferred dtype for that column.
 
         Returns:
             A populated `ColumnCard`.
         """
-        sample_values = series.drop_nulls().head(5).to_list()
-        non_null_values = series.drop_nulls().to_list()
-        sample_size = len(series)
+        non_null_values = [value for value in values if value is not None]
+        sample_values = non_null_values[:5]
+        sample_size = len(values)
         non_null_count = len(non_null_values)
         unique_count = len({str(v) for v in non_null_values})
         uniqueness_ratio = unique_count / non_null_count if non_null_count else 0.0
@@ -90,30 +98,30 @@ class LakeProfiler:
         sequentiality_ratio = self._sequentiality_ratio(non_null_values)
         surrogate_key_score = self._surrogate_key_score(
             column_name=column_name,
-            dtype=str(series.dtype),
+            dtype=dtype,
             uniqueness_ratio=uniqueness_ratio,
             null_ratio=null_ratio,
             sequentiality_ratio=sequentiality_ratio,
         )
         foreign_key_score = self._foreign_key_score(
             column_name=column_name,
-            dtype=str(series.dtype),
+            dtype=dtype,
             uniqueness_ratio=uniqueness_ratio,
             null_ratio=null_ratio,
         )
 
         if sample_values: 
             summary = (
-                f"{column_name} in {table_name} stores {series.dtype} values "
+                f"{column_name} in {table_name} stores {dtype} values "
                 f"such as {sample_values[:3]}."
             )
         else:
-            summary = f"{column_name} in {table_name} stores {series.dtype} values."
+            summary = f"{column_name} in {table_name} stores {dtype} values."
 
         return ColumnCard(
             table_name=table_name,
             column_name=column_name,
-            dtype=str(series.dtype),
+            dtype=dtype,
             sample_values=sample_values,
             summary=summary,
             uniqueness_ratio=uniqueness_ratio,
@@ -246,6 +254,8 @@ class LakeProfiler:
         right_card = self._card_for(right_table, right_column)
         if left_card is None or right_card is None:
             return 0.0
+        if self._is_ambiguous_shared_numeric_join(left_column, right_column):
+            return 0.0
         if left_column == right_column and (
             max(left_card.surrogate_key_score, right_card.surrogate_key_score) >= 0.7
         ):
@@ -319,6 +329,8 @@ class LakeProfiler:
         """
         left = left_column.lower()
         right = right_column.lower()
+        if self._is_ambiguous_shared_numeric_join(left, right):
+            return 0.0
         if left == right:
             if self._name_suggests_key(left):
                 return 1.0
@@ -361,8 +373,29 @@ class LakeProfiler:
             or normalized.endswith("_key")
             or normalized.endswith("_num")
             or normalized.endswith("_no")
-            or normalized.endswith("number")
+            or normalized.endswith("_number")
         )
+
+    def _is_ambiguous_shared_numeric_join(self, left_column: str, right_column: str) -> bool:
+        """
+        Return whether two same-named columns look like weak shared numeric
+        fields rather than a reliable identifier join.
+        """
+        left = left_column.lower()
+        right = right_column.lower()
+        if left != right:
+            return False
+        return left in {
+            "number",
+            "position",
+            "positiontext",
+            "lap",
+            "time",
+            "milliseconds",
+            "wins",
+            "points",
+            "rank",
+        }
 
     def _card_for(self, table_name: str, column_name: str) -> ColumnCard | None:
         for card in self.cards_by_table.get(table_name, []):
@@ -502,6 +535,7 @@ class LakeProfiler:
         query_plan: QueryPlan | None = None,
         max_paths: int = 10,
         max_hops: int = 3,
+        bridge_tables: set[str] | None = None,
     ) -> list[JoinPath]:
         """
         Build join-path candidates from relevant cards and the join graph.
@@ -516,6 +550,8 @@ class LakeProfiler:
             query_plan: Optional structured question intent for path scoring.
             max_paths: Maximum number of join paths to return. Defaults to 10.
             max_hops: Maximum join depth in graph edges. Defaults to 3.
+            bridge_tables: Optional extra tables allowed for expansion without
+                making them required coverage targets.
         
         Returns:
             A list of `JoinPath` objects sorted by descending score.
@@ -527,6 +563,7 @@ class LakeProfiler:
             return []
 
         table_counts = Counter(card.table_name for card in relevant_cards)
+        bridge_tables = set(bridge_tables or set())
         allowed_namespaces = self._allowed_namespaces(table_counts, query_plan)
         if allowed_namespaces:
             table_counts = Counter(
@@ -536,8 +573,17 @@ class LakeProfiler:
                     if self._table_namespace(table) in allowed_namespaces
                 }
             )
-        target_tables = set(table_counts) | self._plan_tables(query_plan)
-        if len(table_counts) == 1 and target_tables == set(table_counts):
+            bridge_tables = {
+                table for table in bridge_tables
+                if self._table_namespace(table) in allowed_namespaces
+            }
+        plan_tables = self._plan_tables(query_plan)
+        target_tables = set(table_counts) | plan_tables
+        if self._should_short_circuit_single_table(
+            table_counts=table_counts,
+            plan_tables=plan_tables,
+            bridge_tables=bridge_tables,
+        ):
             ranked = self._single_table_paths(
                 table_counts,
                 query_plan=query_plan,
@@ -561,6 +607,7 @@ class LakeProfiler:
             {
                 "root_tables": sorted(table_counts),
                 "plan_tables": sorted(target_tables - set(table_counts)),
+                "bridge_tables": sorted(bridge_tables),
                 "allowed_namespaces": sorted(allowed_namespaces),
                 "max_hops": max_hops,
                 "max_paths": max_paths,
@@ -627,6 +674,7 @@ class LakeProfiler:
                         table_counts=table_counts,
                         query_plan=query_plan,
                         target_tables=target_tables,
+                        bridge_tables=bridge_tables,
                         remaining_hops=max_hops - len(join_edges),
                         allowed_namespaces=allowed_namespaces,
                     ):
@@ -660,6 +708,26 @@ class LakeProfiler:
         ranked = sorted(paths_by_signature.values(), key=lambda p: p.score, reverse=True)
         self.logger.log("join_paths", "Ranked join paths.", ranked[:max_paths])
         return ranked[:max_paths]
+
+    def _should_short_circuit_single_table(
+        self,
+        *,
+        table_counts: Counter,
+        plan_tables: set[str],
+        bridge_tables: set[str],
+    ) -> bool:
+        """
+        Allow single-table short-circuiting only when both retrieval and the
+        parsed query plan explicitly converge on the same table.
+        """
+        if len(table_counts) != 1:
+            return False
+        if bridge_tables:
+            return False
+        retrieved_tables = set(table_counts)
+        if not plan_tables:
+            return False
+        return plan_tables == retrieved_tables
 
     def _single_table_paths(
         self,
@@ -816,7 +884,7 @@ class LakeProfiler:
         for table in tables:
             if table not in self._sample_size_cache:
                 try:
-                    self._sample_size_cache[table] = self.lake.get_sample(table, n=100).height
+                    self._sample_size_cache[table] = len(self.lake.get_sample(table, n=100))
                 except Exception:  # noqa: BLE001
                     self._sample_size_cache[table] = None
             sample_size = self._sample_size_cache[table]
@@ -890,6 +958,7 @@ class LakeProfiler:
         table_counts: Counter,
         query_plan: QueryPlan | None,
         target_tables: set[str],
+        bridge_tables: set[str],
         remaining_hops: int,
         allowed_namespaces: set[str],
     ) -> bool:
@@ -902,6 +971,8 @@ class LakeProfiler:
             return True
         plan_tables = self._plan_tables(query_plan)
         if next_table in plan_tables:
+            return True
+        if next_table in bridge_tables:
             return True
         missing_targets = target_tables - set(current_tables) - {next_table}
         if not missing_targets or remaining_hops <= 1:

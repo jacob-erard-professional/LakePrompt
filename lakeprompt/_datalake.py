@@ -1,6 +1,9 @@
+import csv
+import sqlite3
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-import polars as pl
+from typing import Any
 
 
 DEFAULT_INFER_SCHEMA_LENGTH = 10_000
@@ -13,7 +16,7 @@ class DataLake:
     Central representation of a data lake for use across LakePrompt.
 
     Scans a directory of CSV files and registers each as a named table
-    using Polars lazy frames. This class exists so every pipeline stage
+    in SQLite. This class exists so every pipeline stage
     works from one consistent abstraction instead of passing raw file
     paths or ad hoc DataFrames around. Centralizing loading, sampling,
     and SQL execution reduces duplication and makes later stages easier
@@ -31,6 +34,8 @@ class DataLake:
     tables: dict[str, object] = field(default_factory=dict)    
     cards: list = field(default_factory=list)
     join_graph: dict = field(default_factory=dict)
+    connection: sqlite3.Connection | None = field(default=None, init=False, repr=False)
+    db_path: Path | None = field(default=None, init=False)
 
     @classmethod
     def load(cls, lake_dir: str) -> "DataLake":
@@ -49,7 +54,7 @@ class DataLake:
             lake_dir: Path to the directory containing CSV files.
 
         Returns:
-            A `DataLake` populated with one lazy Polars frame per CSV.
+            A `DataLake` populated with one SQLite-backed table per CSV.
 
         Raises:
             FileNotFoundError: If lake_dir does not exist.
@@ -61,7 +66,7 @@ class DataLake:
 
     def _load_tables(self) -> None:
         """
-        Load all CSV files in `lake_dir` as named lazy tables.
+        Load all CSV files in `lake_dir` into a local SQLite database.
 
         This internal helper keeps filesystem validation and registration
         logic in one place, which makes initialization behavior easier to
@@ -79,26 +84,142 @@ class DataLake:
         if not csv_files:
             raise ValueError(f"No CSV files found in: {self.lake_dir}")
 
+        temp_dir = Path(tempfile.mkdtemp(prefix="lakeprompt_sqlite_"))
+        self.db_path = temp_dir / "lake.sqlite3"
+        self.connection = sqlite3.connect(str(self.db_path))
+        self.connection.row_factory = sqlite3.Row
+
         used_names: set[str] = set()
         for path in csv_files:
             table_name = self._table_name_from_path(path, used_names)
-            lazy_frame = pl.scan_csv(
-                str(path),
-                infer_schema_length=DEFAULT_INFER_SCHEMA_LENGTH,
-                null_values=DEFAULT_NULL_VALUES,
-                ignore_errors=True,
-            )
-            schema = lazy_frame.collect_schema()
-            string_columns = [
-                name
-                for name, dtype in schema.items()
-                if str(dtype).lower() == "string"
-            ]
-            if string_columns:
-                lazy_frame = lazy_frame.with_columns(
-                    [pl.col(name).str.strip_chars().alias(name) for name in string_columns]
-                )
-            self.tables[table_name] = lazy_frame
+            self._load_csv_into_sqlite(path, table_name)
+            self.tables[table_name] = {"name": table_name}
+        self.connection.commit()
+
+    def _load_csv_into_sqlite(self, csv_path: Path, table_name: str) -> None:
+        """
+        Create a SQLite table for one CSV and bulk insert its rows.
+        """
+        if self.connection is None:
+            raise RuntimeError("SQLite connection is not initialized.")
+
+        with csv_path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            try:
+                header = next(reader)
+            except StopIteration:
+                return
+
+            columns = [column.strip() for column in header]
+            sample_rows: list[list[object | None]] = []
+            inferred_types = ["INTEGER"] * len(columns)
+
+            for row_index, row in enumerate(reader):
+                normalized = self._normalize_csv_row(row, len(columns))
+                if row_index < DEFAULT_INFER_SCHEMA_LENGTH:
+                    sample_rows.append(normalized)
+                    for idx, value in enumerate(normalized):
+                        inferred_types[idx] = self._merge_sqlite_types(
+                            inferred_types[idx],
+                            self._sqlite_type_for_value(value),
+                        )
+                else:
+                    break
+
+        create_columns = ", ".join(
+            f'{self._quote_identifier(column)} {dtype}'
+            for column, dtype in zip(columns, inferred_types, strict=False)
+        )
+        self.connection.execute(
+            f'CREATE TABLE {self._quote_identifier(table_name)} ({create_columns})'
+        )
+
+        placeholders = ", ".join("?" for _ in columns)
+        insert_sql = (
+            f'INSERT INTO {self._quote_identifier(table_name)} '
+            f'VALUES ({placeholders})'
+        )
+
+        if sample_rows:
+            self.connection.executemany(insert_sql, sample_rows)
+
+        with csv_path.open("r", newline="", encoding="utf-8") as handle:
+            reader = csv.reader(handle)
+            next(reader, None)
+            skipped = 0
+            batch: list[list[object | None]] = []
+            for row in reader:
+                normalized = self._normalize_csv_row(row, len(columns))
+                if skipped < len(sample_rows):
+                    skipped += 1
+                    continue
+                batch.append(normalized)
+                if len(batch) >= 1000:
+                    self.connection.executemany(insert_sql, batch)
+                    batch.clear()
+            if batch:
+                self.connection.executemany(insert_sql, batch)
+
+    def _normalize_csv_row(self, row: list[str], width: int) -> list[object | None]:
+        """
+        Normalize one CSV row for SQLite insertion and type inference.
+        """
+        padded = list(row[:width]) + [""] * max(0, width - len(row))
+        normalized: list[object | None] = []
+        for value in padded:
+            stripped = value.strip()
+            if stripped in {"", *DEFAULT_NULL_VALUES}:
+                normalized.append(None)
+                continue
+            if self._is_int_like(stripped):
+                normalized.append(int(stripped))
+                continue
+            if self._is_float_like(stripped):
+                normalized.append(float(stripped))
+                continue
+            normalized.append(stripped)
+        return normalized
+
+    @staticmethod
+    def _is_int_like(value: str) -> bool:
+        if value.startswith(("+", "-")):
+            value = value[1:]
+        return value.isdigit()
+
+    @staticmethod
+    def _is_float_like(value: str) -> bool:
+        try:
+            float(value)
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def _sqlite_type_for_value(value: object | None) -> str:
+        if value is None:
+            return "INTEGER"
+        if isinstance(value, bool):
+            return "INTEGER"
+        if isinstance(value, int):
+            return "INTEGER"
+        if isinstance(value, float):
+            return "REAL"
+        return "TEXT"
+
+    @staticmethod
+    def _merge_sqlite_types(current: str, observed: str) -> str:
+        if current == observed:
+            return current
+        if "TEXT" in {current, observed}:
+            return "TEXT"
+        if "REAL" in {current, observed}:
+            return "REAL"
+        return "INTEGER"
+
+    @staticmethod
+    def _quote_identifier(identifier: str) -> str:
+        escaped = identifier.replace('"', '""')
+        return f'"{escaped}"'
 
     def _table_name_from_path(self, csv_path: Path, used_names: set[str]) -> str:
         """
@@ -118,7 +239,7 @@ class DataLake:
         used_names.add(candidate)
         return candidate
 
-    def query(self, sql: str) -> pl.DataFrame:
+    def query(self, sql: str) -> list[dict[str, Any]]:
         """
         Execute a SQL query across all registered tables.
 
@@ -133,14 +254,21 @@ class DataLake:
             sql: SQL query referencing one or more table names.
 
         Returns:
-            An eager Polars DataFrame containing the query result.
+            A list of row dicts keyed by output column name.
         """
-        ctx = pl.SQLContext()
-        for name, lf in self.tables.items():
-            ctx.register(name, lf)
-        return ctx.execute(sql).collect()
+        if self.connection is None:
+            raise RuntimeError("SQLite connection is not initialized.")
+        cursor = self.connection.execute(sql)
+        rows = cursor.fetchall()
+        if not cursor.description:
+            return []
+        columns = [item[0] for item in cursor.description]
+        return [
+            {column: row[idx] for idx, column in enumerate(columns)}
+            for row in rows
+        ]
 
-    def get_sample(self, table_name: str, n: int = 1000) -> pl.DataFrame:
+    def get_sample(self, table_name: str, n: int = 1000) -> list[dict[str, Any]]:
         """
         Return a small sample from a table.
 
@@ -153,7 +281,7 @@ class DataLake:
             n: Maximum number of rows to return. Defaults to 1000.
 
         Returns:
-            An eager Polars DataFrame with at most n rows.
+            A list of row dicts with at most n rows.
 
         Raises:
             KeyError: If table_name is not found in self.tables.
@@ -163,7 +291,43 @@ class DataLake:
                 f"Table '{table_name}' not found. "
                 f"Available: {list(self.tables.keys())}"
             )
-        return self.tables[table_name].head(n).collect()
+        return self.query(
+            f"SELECT * FROM {self._quote_identifier(table_name)} LIMIT {int(n)}"
+        )
+
+    def get_table_columns(self, table_name: str) -> list[str]:
+        """
+        Return the declared column names for a table.
+        """
+        if table_name not in self.tables:
+            raise KeyError(
+                f"Table '{table_name}' not found. "
+                f"Available: {list(self.tables.keys())}"
+            )
+        cursor = self.connection.execute(
+            f"PRAGMA table_info({self._quote_identifier(table_name)})"
+        )
+        return [row[1] for row in cursor.fetchall()]
+
+    def get_column_dtype(self, table_name: str, col: str) -> str:
+        """
+        Return the SQLite dtype for one table column.
+        """
+        cursor = self.connection.execute(
+            f"PRAGMA table_info({self._quote_identifier(table_name)})"
+        )
+        for row in cursor.fetchall():
+            if row[1] == col:
+                dtype = str(row[2]).lower()
+                if "int" in dtype:
+                    return "integer"
+                if "real" in dtype or "float" in dtype or "double" in dtype:
+                    return "float"
+                return "string"
+        raise ValueError(
+            f"Column '{col}' not found in '{table_name}'. "
+            f"Available: {self.get_table_columns(table_name)}"
+        )
 
     def get_column_values(self, table_name: str, col: str) -> set:
         """
@@ -186,21 +350,32 @@ class DataLake:
             KeyError: If table_name is not found.
             ValueError: If col is not found in the table.
         """
-        sample = self.get_sample(table_name)
-        if col not in sample.columns:
+        if table_name not in self.tables:
+            raise KeyError(
+                f"Table '{table_name}' not found. "
+                f"Available: {list(self.tables.keys())}"
+            )
+        if col not in self.get_table_columns(table_name):
             raise ValueError(
                 f"Column '{col}' not found in '{table_name}'. "
-                f"Available: {sample.columns}"
+                f"Available: {self.get_table_columns(table_name)}"
             )
-        values = (
-            sample[col]
-            .drop_nulls()
-            .cast(pl.Utf8)
-            .str.strip_chars()
-            .unique()
-            .to_list()
+        sample = self.query(
+            " ".join(
+                [
+                    f"SELECT DISTINCT {self._quote_identifier(col)} AS {self._quote_identifier(col)}",
+                    f"FROM {self._quote_identifier(table_name)}",
+                    f"WHERE {self._quote_identifier(col)} IS NOT NULL",
+                    "LIMIT 1000",
+                ]
+            )
         )
+        values = [str(row[col]).strip() for row in sample if row.get(col) is not None]
         return {value for value in values if value}
+
+    def __del__(self) -> None:
+        if self.connection is not None:
+            self.connection.close()
 
     def __repr__(self) -> str:
         return f"DataLake(tables={list(self.tables.keys())})"

@@ -26,7 +26,7 @@ def _name_similarity(left: str | None, right: str | None) -> float:
 
 def _quote_identifier(identifier: str) -> str:
     """
-    Quote a SQL identifier for Polars SQL.
+    Quote a SQL identifier for SQLite SQL.
 
     This helper is needed because executor-generated SQL must be robust to
     table and column names that require quoting.
@@ -67,20 +67,28 @@ def _qualified_column(column: str, table: str | None = None) -> str:
     return _quote_identifier(column)
 
 
-def _planned_column(column: str, table: str | None = None) -> str:
+def _select_expression(column: str, table: str | None = None, aggregation: str | None = None) -> str:
     """
-    Return a column reference against the base path query output.
+    Build a direct select expression against joined SQLite tables.
+    """
+    column_sql = _qualified_column(column, table)
+    if aggregation:
+        return f"{aggregation.upper()}({column_sql})"
+    return column_sql
 
-    Path SQL selects stable aliases like `table__column` so downstream query
-    refinement should target those aliases rather than raw joined columns.
-    This avoids backend-specific duplicate-column naming after joins.
+
+def _default_output_alias(
+    column: str,
+    table: str | None,
+    *,
+    duplicate_columns: set[str],
+) -> str:
     """
-    if "." in column:
-        table_name, column_name = column.split(".", 1)
-        return _quote_identifier(f"{table_name}__{column_name}")
-    if table:
-        return _quote_identifier(f"{table}__{column}")
-    return _quote_identifier(column)
+    Use bare column names when unique and `table__column` only when needed.
+    """
+    if table and column in duplicate_columns:
+        return f"{table}__{column}"
+    return column
 
 
 def _filter_to_sql(filter_: QueryFilter) -> str:
@@ -90,7 +98,7 @@ def _filter_to_sql(filter_: QueryFilter) -> str:
     This helper is needed because `QueryPlan` stores filters as data rather
     than executable SQL text.
     """
-    column_sql = _planned_column(filter_.column, filter_.table)
+    column_sql = _qualified_column(filter_.column, filter_.table)
     operator = filter_.operator.upper()
     value = filter_.value
 
@@ -118,10 +126,7 @@ def _select_to_sql(select: QuerySelect) -> str:
     This helper is needed because projections may include optional
     aggregation and table qualification.
     """
-    column_sql = _planned_column(select.column, select.table)
-    if select.aggregation:
-        return f"{select.aggregation.upper()}({column_sql})"
-    return column_sql
+    return _select_expression(select.column, select.table, select.aggregation)
 
 
 def _select_alias(select: QuerySelect, index: int) -> str:
@@ -144,10 +149,7 @@ def _order_to_sql(order: QueryOrder) -> str:
     This helper is needed because sort directives can target either raw or
     aggregated expressions.
     """
-    column_sql = _planned_column(order.column, order.table)
-    if order.aggregation:
-        column_sql = f"{order.aggregation.upper()}({column_sql})"
-    return f"{column_sql} {order.direction.upper()}"
+    return f"{_select_expression(order.column, order.table, order.aggregation)} {order.direction.upper()}"
 
 
 def _group_item_to_sql(item: str) -> str:
@@ -158,7 +160,7 @@ def _group_item_to_sql(item: str) -> str:
     column name. This helper keeps the conversion logic consistent in one
     place so grouped projections can be reconciled with the GROUP BY clause.
     """
-    return _planned_column(item)
+    return _qualified_column(item)
 
 
 def compile_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> tuple[str, list[OutputColumn]]:
@@ -275,8 +277,8 @@ def compile_query_plan_to_sql(sql_query: str, plan: QueryPlan) -> tuple[str, lis
     if plan.group_by:
         group_items = list(plan.group_by)
         for projection in select_items:
-            # Polars SQL is strict about grouped selects: every projected
-            # non-aggregated column must appear in GROUP BY.
+            # Keep grouped projections deterministic across SQLite datasets
+            # by including every non-aggregated projected column in GROUP BY.
             if projection.aggregation:
                 continue
             group_item = (
@@ -349,6 +351,103 @@ class SqlBuilder:
 
     lake: DataLake
 
+    def compile_path_sql(
+        self,
+        path: JoinPath,
+        plan: QueryPlan | None = None,
+    ) -> tuple[str, list[OutputColumn]]:
+        """
+        Convert a JoinPath and optional QueryPlan into executable SQLite SQL.
+
+        The builder emits direct table-qualified predicates and only aliases
+        duplicate output columns, which keeps generated SQL much closer to the
+        schema the planner sees.
+        """
+        tables: list[str] = path.tables
+        if not tables:
+            raise ValueError("JoinPath must reference at least one table.")
+        if len(tables) > 1 and len(path.join_keys) < 1:
+            raise ValueError(
+                f"JoinPath must include join keys for multi-table execution: {tables}"
+            )
+
+        duplicate_columns = self._duplicate_columns(tables)
+        plan = plan or QueryPlan()
+        output_columns: list[OutputColumn] = []
+        projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
+
+        select_items = list(plan.projections)
+        projected_keys = {
+            (item.table, item.column, item.aggregation)
+            for item in select_items
+        }
+        for item in plan.order_by:
+            key = (item.table, item.column, item.aggregation)
+            if item.aggregation and key not in projected_keys:
+                select_items.append(
+                    QuerySelect(
+                        table=item.table,
+                        column=item.column,
+                        aggregation=item.aggregation,
+                    )
+                )
+                projected_keys.add(key)
+
+        if plan.projections:
+            select_clause, output_columns, projection_aliases = self._build_projection_clause(
+                select_items,
+                duplicate_columns=duplicate_columns,
+            )
+        elif plan.group_by:
+            select_clause, output_columns, projection_aliases = self._build_grouped_clause(
+                plan,
+                select_items,
+                duplicate_columns=duplicate_columns,
+            )
+        else:
+            select_clause, output_columns = self._build_default_select_clause(
+                tables,
+                duplicate_columns=duplicate_columns,
+            )
+
+        parts = [select_clause, self._build_from_clause(path)]
+
+        if plan.filters:
+            parts.append("WHERE " + " AND ".join(_filter_to_sql(item) for item in plan.filters))
+
+        if plan.group_by:
+            group_items = list(plan.group_by)
+            for projection in select_items:
+                if projection.aggregation:
+                    continue
+                group_item = (
+                    f"{projection.table}.{projection.column}"
+                    if projection.table
+                    else projection.column
+                )
+                if group_item not in group_items:
+                    group_items.append(group_item)
+            group_sql = ", ".join(_group_item_to_sql(item) for item in group_items)
+            parts.append(f"GROUP BY {group_sql}")
+
+        if plan.having:
+            parts.append("HAVING " + " AND ".join(_filter_to_sql(item) for item in plan.having))
+
+        if plan.order_by:
+            order_parts: list[str] = []
+            for item in plan.order_by:
+                alias = projection_aliases.get((item.table, item.column, item.aggregation))
+                if alias:
+                    order_parts.append(f"{_quote_identifier(alias)} {item.direction.upper()}")
+                else:
+                    order_parts.append(_order_to_sql(item))
+            parts.append("ORDER BY " + ", ".join(order_parts))
+
+        if plan.limit is not None:
+            parts.append(f"LIMIT {plan.limit}")
+
+        return "\n".join(parts), output_columns
+
     def build_path_sql(self, path: JoinPath) -> str:
         """
         Convert a JoinPath into a SQL SELECT ... JOIN ... ON ... string.
@@ -358,52 +457,129 @@ class SqlBuilder:
         This method is needed because the executor must preserve the chosen
         join structure before any question-specific refinement is applied.
         """
-        if len(path.tables) == 1:
-            table_name = path.tables[0]
-            col_aliases = self._build_column_aliases([table_name])
-            select_parts: list[str] = []
-            for tbl, col, alias in col_aliases:
-                if alias != col:
-                    select_parts.append(
-                        f"{_quote_identifier(tbl)}.{_quote_identifier(col)} AS {_quote_identifier(alias)}"
-                    )
-                else:
-                    select_parts.append(f"{_quote_identifier(tbl)}.{_quote_identifier(col)}")
-            return (
-                f"SELECT {', '.join(select_parts)} "
-                f"FROM {_quote_identifier(table_name)}"
-            )
+        sql, _output_columns = self.compile_path_sql(path, QueryPlan())
+        return sql
 
+    def _build_from_clause(self, path: JoinPath) -> str:
         tables: list[str] = path.tables
-        join_keys: list[tuple[str, str, str, str]] = path.join_keys
-
-        if len(tables) < 2:
-            raise ValueError(
-                f"JoinPath must reference at least two tables, got: {tables}"
-            )
-
-        col_aliases = self._build_column_aliases(tables)
-
-        select_parts: list[str] = []
-        for tbl, col, alias in col_aliases:
-            if alias != col:
-                select_parts.append(
-                    f"{_quote_identifier(tbl)}.{_quote_identifier(col)} AS {_quote_identifier(alias)}"
-                )
-            else:
-                select_parts.append(f"{_quote_identifier(tbl)}.{_quote_identifier(col)}")
-
-        sql = f"SELECT {', '.join(select_parts)}\nFROM {_quote_identifier(tables[0])}"
-
-        for t1, col1, t2, col2 in join_keys:
+        sql = f"FROM {_quote_identifier(tables[0])}"
+        for t1, col1, t2, col2 in path.join_keys:
             left_join_expr = self._join_operand_sql(t1, col1)
             right_join_expr = self._join_operand_sql(t2, col2)
             sql += (
                 f"\nJOIN {_quote_identifier(t2)} "
                 f"ON {left_join_expr} = {right_join_expr}"
             )
-
         return sql
+
+    def _build_default_select_clause(
+        self,
+        tables: list[str],
+        *,
+        duplicate_columns: set[str],
+    ) -> tuple[str, list[OutputColumn]]:
+        select_parts: list[str] = []
+        output_columns: list[OutputColumn] = []
+        for tbl, col in self._table_columns(tables):
+            alias = _default_output_alias(col, tbl, duplicate_columns=duplicate_columns)
+            select_parts.append(
+                f"{_qualified_column(col, tbl)} AS {_quote_identifier(alias)}"
+            )
+            output_columns.append(
+                OutputColumn(
+                    output_key=alias,
+                    table=tbl,
+                    column=col,
+                    aggregation=None,
+                )
+            )
+        return f"SELECT {', '.join(select_parts)}", output_columns
+
+    def _build_projection_clause(
+        self,
+        select_items: list[QuerySelect],
+        *,
+        duplicate_columns: set[str],
+    ) -> tuple[str, list[OutputColumn], dict[tuple[str | None, str, str | None], str]]:
+        projection_parts: list[str] = []
+        output_columns: list[OutputColumn] = []
+        projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
+        used_aliases: set[str] = set()
+
+        for idx, item in enumerate(select_items):
+            alias = _select_alias(item, idx)
+            if not item.aggregation:
+                alias = _default_output_alias(item.column, item.table, duplicate_columns=duplicate_columns)
+            if alias in used_aliases:
+                alias = _select_alias(item, idx)
+            used_aliases.add(alias)
+            projection_aliases[(item.table, item.column, item.aggregation)] = alias
+            projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
+            output_columns.append(
+                OutputColumn(
+                    output_key=alias,
+                    table=item.table,
+                    column=item.column,
+                    aggregation=item.aggregation,
+                )
+            )
+
+        return (
+            f"SELECT {', '.join(projection_parts)}",
+            output_columns,
+            projection_aliases,
+        )
+
+    def _build_grouped_clause(
+        self,
+        plan: QueryPlan,
+        select_items: list[QuerySelect],
+        *,
+        duplicate_columns: set[str],
+    ) -> tuple[str, list[OutputColumn], dict[tuple[str | None, str, str | None], str]]:
+        projection_parts: list[str] = []
+        output_columns: list[OutputColumn] = []
+        projection_aliases: dict[tuple[str | None, str, str | None], str] = {}
+        grouped_aliases: set[str] = set()
+
+        for item in plan.group_by:
+            table = item.split(".", 1)[0] if "." in item else None
+            column = item.split(".", 1)[-1]
+            alias = _default_output_alias(column, table, duplicate_columns=duplicate_columns)
+            projection_parts.append(f"{_group_item_to_sql(item)} AS {_quote_identifier(alias)}")
+            grouped_aliases.add(alias)
+            output_columns.append(
+                OutputColumn(
+                    output_key=alias,
+                    table=table,
+                    column=column,
+                    aggregation=None,
+                )
+            )
+
+        for idx, item in enumerate(select_items):
+            alias = _select_alias(item, idx)
+            if not item.aggregation:
+                alias = _default_output_alias(item.column, item.table, duplicate_columns=duplicate_columns)
+            if alias in grouped_aliases:
+                projection_aliases[(item.table, item.column, item.aggregation)] = alias
+                continue
+            projection_aliases[(item.table, item.column, item.aggregation)] = alias
+            projection_parts.append(f"{_select_to_sql(item)} AS {_quote_identifier(alias)}")
+            output_columns.append(
+                OutputColumn(
+                    output_key=alias,
+                    table=item.table,
+                    column=item.column,
+                    aggregation=item.aggregation,
+                )
+            )
+
+        return (
+            f"SELECT {', '.join(projection_parts)}",
+            output_columns,
+            projection_aliases,
+        )
 
     def _join_operand_sql(self, table_name: str, column_name: str) -> str:
         """
@@ -414,21 +590,16 @@ class SqlBuilder:
         """
         column_sql = f"{_quote_identifier(table_name)}.{_quote_identifier(column_name)}"
         try:
-            dtype = str(self.lake.get_sample(table_name, n=1)[column_name].dtype).lower()
+            dtype = self.lake.get_column_dtype(table_name, column_name).lower()
         except Exception:  # noqa: BLE001
             return column_sql
         if "string" in dtype:
             return f"TRIM({column_sql})"
         return column_sql
 
-    def _build_column_aliases(
-        self, tables: list[str]
-    ) -> list[tuple[str, str, str]]:
+    def _table_columns(self, tables: list[str]) -> list[tuple[str, str]]:
         """
-        Return `(table, column, alias)` triples for all columns across tables.
-
-        This helper is needed because joined rows need stable, non-colliding
-        output keys for downstream ranking and packaging.
+        Return `(table, column)` pairs for all columns across the path tables.
         """
         table_cols: dict[str, list[str]] = {}
 
@@ -437,15 +608,21 @@ class SqlBuilder:
                 warnings.warn(f"Table '{tbl}' not found in lake; skipping.", stacklevel=2)
                 table_cols[tbl] = []
                 continue
-            cols = self.lake.get_sample(tbl, n=1).columns
+            cols = self.lake.get_table_columns(tbl)
             table_cols[tbl] = cols
 
-        result: list[tuple[str, str, str]] = []
+        result: list[tuple[str, str]] = []
         for tbl in tables:
             for col in table_cols.get(tbl, []):
-                result.append((tbl, col, f"{tbl}__{col}"))
+                result.append((tbl, col))
 
         return result
+
+    def _duplicate_columns(self, tables: list[str]) -> set[str]:
+        counts: dict[str, int] = {}
+        for _table, column in self._table_columns(tables):
+            counts[column] = counts.get(column, 0) + 1
+        return {column for column, count in counts.items() if count > 1}
 
 
 @dataclass
@@ -484,7 +661,7 @@ class QueryPlanApplier:
             raw_plan = query_plan if query_plan is not None else plan_llm_query(question, sql, involved_cards)
             coerced_plan = self._coerce_query_plan_types(raw_plan, involved_cards)
             sanitized_plan = self._sanitize_query_plan(coerced_plan, involved_cards)
-            refined_sql, output_columns = compile_query_plan_to_sql(sql, sanitized_plan)
+            refined_sql, output_columns = SqlBuilder(self.lake).compile_path_sql(path, sanitized_plan)
             self.logger.log(
                 "query_plan_debug",
                 "Transformed query plan before SQL generation.",

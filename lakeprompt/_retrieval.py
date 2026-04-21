@@ -1,9 +1,21 @@
+import io
+from contextlib import redirect_stderr, redirect_stdout
+
 import numpy as np
 import hnswlib
 from sentence_transformers import SentenceTransformer
 
 from ._models import ColumnCard
 from ._tracing import NULL_LOGGER, PipelineLogger
+
+
+def _load_sentence_transformer(model_name: str) -> SentenceTransformer:
+    """
+    Load a sentence-transformer model while suppressing library startup noise.
+    """
+    sink = io.StringIO()
+    with redirect_stdout(sink), redirect_stderr(sink):
+        return SentenceTransformer(model_name)
 
 
 class SemanticRetriever:
@@ -41,7 +53,7 @@ class SemanticRetriever:
         logger: PipelineLogger | None = None,
     ):
         self.cards_by_table = cards_by_table
-        self.model = SentenceTransformer(model_name)
+        self.model = _load_sentence_transformer(model_name)
         self.index = None
         self._indexed_cards: list[ColumnCard] = []
         self.score_window = score_window
