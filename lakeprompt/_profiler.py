@@ -579,6 +579,21 @@ class LakeProfiler:
             }
         plan_tables = self._plan_tables(query_plan)
         target_tables = set(table_counts) | plan_tables
+        direct_plan_table = self._single_table_query_plan_target(query_plan)
+        if direct_plan_table is not None:
+            ranked = self._single_table_paths(
+                Counter({direct_plan_table: max(table_counts.get(direct_plan_table, 1), 1)}),
+                query_plan=query_plan,
+                max_paths=max_paths,
+            )
+            if ranked:
+                self.logger.log(
+                    "join_paths_progress",
+                    "Short-circuited to single-table join planning from query-plan target.",
+                    ranked,
+                )
+                self.logger.log("join_paths", "Ranked join paths.", ranked)
+                return ranked
         if self._should_short_circuit_single_table(
             table_counts=table_counts,
             plan_tables=plan_tables,
@@ -728,6 +743,32 @@ class LakeProfiler:
         if not plan_tables:
             return False
         return plan_tables == retrieved_tables
+
+    def _single_table_query_plan_target(self, query_plan: QueryPlan | None) -> str | None:
+        """
+        Return a single explicit query-plan table when the plan can be
+        satisfied from one table alone.
+        """
+        if query_plan is None:
+            return None
+
+        referenced_tables: set[str] = set()
+        for filter_ in query_plan.filters + query_plan.having:
+            if filter_.table:
+                referenced_tables.add(filter_.table)
+        for projection in query_plan.projections:
+            if projection.table:
+                referenced_tables.add(projection.table)
+        for order in query_plan.order_by:
+            if order.table:
+                referenced_tables.add(order.table)
+        for item in query_plan.group_by:
+            if "." in item:
+                referenced_tables.add(item.split(".", 1)[0])
+
+        if len(referenced_tables) != 1:
+            return None
+        return next(iter(referenced_tables))
 
     def _single_table_paths(
         self,
