@@ -787,7 +787,7 @@ class SpiderJoinEvaluation:
         best_score = -1
         best_text = ""
         for csv_path in sorted(schema_dir.glob("*.csv")):
-            df = pl.read_csv(csv_path, n_rows=sample_rows)
+            df = pl.read_csv(csv_path, n_rows=sample_rows, infer_schema_length=0, ignore_errors=True)
             col_tokens = set(" ".join(df.columns).lower().split())
             score = len(question_tokens & col_tokens)
             if score > best_score:
@@ -803,7 +803,7 @@ class SpiderJoinEvaluation:
         """Return sample rows from every table in the schema, concatenated."""
         sections: list[str] = []
         for csv_path in sorted(schema_dir.glob("*.csv")):
-            df = pl.read_csv(csv_path, n_rows=sample_rows)
+            df = pl.read_csv(csv_path, n_rows=sample_rows, infer_schema_length=0, ignore_errors=True)
             section = f"Table: {csv_path.stem}\n"
             section += "\n".join(
                 json.dumps(row, default=str, sort_keys=True) for row in df.to_dicts()
@@ -852,7 +852,7 @@ class SpiderJoinEvaluation:
     def _build_schema_description(self, schema_dir: Path, sample_rows: int) -> str:
         sections: list[str] = []
         for csv_path in sorted(schema_dir.glob("*.csv")):
-            df = pl.read_csv(csv_path, n_rows=sample_rows)
+            df = pl.read_csv(csv_path, n_rows=sample_rows, infer_schema_length=0, ignore_errors=True)
             sections.append(f"Table: {csv_path.stem}")
             sections.append(f"Columns: {', '.join(df.columns)}")
             if df.height:
