@@ -202,6 +202,13 @@ def _context_token_count(evidence_lines: str) -> int:
     return len(evidence_lines.split())
 
 
+def _mean_optional_int(values: list[int | None]) -> float | None:
+    present = [value for value in values if value is not None]
+    if not present:
+        return None
+    return round(sum(present) / len(present), 1)
+
+
 def _join_count(evidence: list) -> int:
     """Count distinct join paths used across all evidence items."""
     path_ids: set[str] = set()
@@ -224,6 +231,8 @@ class ConditionResult:
     context_tokens: int  # whitespace-token count of serialized evidence lines only
     raw_response: str = ""
     prompt_tokens: int = 0  # whitespace-token count of the full prompt sent to the LLM
+    api_input_tokens: int | None = None
+    api_output_tokens: int | None = None
     cited_ids: list[str] = field(default_factory=list)
     generated_sql: list[str] = field(default_factory=list)
     error: str | None = None
@@ -245,6 +254,13 @@ class EvaluationExample:
     conditions: list[ConditionResult] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ClaudeCompletion:
+    text: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
 class ClaudeClient:
     """Thin wrapper around the Anthropic Messages API."""
 
@@ -255,6 +271,31 @@ class ClaudeClient:
         self.model = model
         self.client = anthropic.Anthropic(api_key=api_key)
 
+    def complete_with_usage(
+        self,
+        *,
+        system: str,
+        prompt: str,
+        max_tokens: int = 1000,
+        temperature: float = 0.2,
+    ) -> ClaudeCompletion:
+        message = self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(
+            block.text for block in message.content if getattr(block, "type", None) == "text"
+        ).strip()
+        usage = getattr(message, "usage", None)
+        return ClaudeCompletion(
+            text=text,
+            input_tokens=getattr(usage, "input_tokens", None),
+            output_tokens=getattr(usage, "output_tokens", None),
+        )
+
     def complete(
         self,
         *,
@@ -263,16 +304,12 @@ class ClaudeClient:
         max_tokens: int = 1000,
         temperature: float = 0.2,
     ) -> str:
-        message = self.client.messages.create(
-            model=self.model,
+        return self.complete_with_usage(
+            system=system,
+            prompt=prompt,
             max_tokens=max_tokens,
             temperature=temperature,
-            system=system,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return "".join(
-            block.text for block in message.content if getattr(block, "type", None) == "text"
-        ).strip()
+        ).text
 
 
 class SpiderJoinEvaluation:
@@ -571,11 +608,13 @@ class SpiderJoinEvaluation:
         """Condition 1: LLM answers with zero context."""
         prompt = f"Answer the following question as best you can.\n\nQuestion:\n{question}"
         start = time.monotonic()
+        completion: ClaudeCompletion | None = None
         try:
-            answer = self.claude.complete(
+            completion = self.claude.complete_with_usage(
                 system="Answer questions about data. If you cannot answer, say so.",
                 prompt=prompt,
             )
+            answer = completion.text
             error = None
         except Exception as exc:  # noqa: BLE001
             answer = ""
@@ -590,6 +629,8 @@ class SpiderJoinEvaluation:
             context_tokens=0,
             raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
+            api_input_tokens=completion.input_tokens if completion is not None else None,
+            api_output_tokens=completion.output_tokens if completion is not None else None,
             error=error,
         )
 
@@ -613,11 +654,13 @@ class SpiderJoinEvaluation:
         )
         context_tokens = _context_token_count(best_table_rows)
         start = time.monotonic()
+        completion: ClaudeCompletion | None = None
         try:
-            answer = self.claude.complete(
+            completion = self.claude.complete_with_usage(
                 system="Answer questions about data using only the provided rows. If insufficient, say so.",
                 prompt=prompt,
             )
+            answer = completion.text
             error = None
         except Exception as exc:  # noqa: BLE001
             answer = ""
@@ -632,6 +675,8 @@ class SpiderJoinEvaluation:
             context_tokens=context_tokens,
             raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
+            api_input_tokens=completion.input_tokens if completion is not None else None,
+            api_output_tokens=completion.output_tokens if completion is not None else None,
             error=error,
         )
 
@@ -652,11 +697,13 @@ class SpiderJoinEvaluation:
         )
         context_tokens = _context_token_count(all_rows_text)
         start = time.monotonic()
+        completion: ClaudeCompletion | None = None
         try:
-            answer = self.claude.complete(
+            completion = self.claude.complete_with_usage(
                 system="Answer questions about data using only the provided rows. If insufficient, say so.",
                 prompt=prompt,
             )
+            answer = completion.text
             error = None
         except Exception as exc:
             answer = ""
@@ -671,6 +718,8 @@ class SpiderJoinEvaluation:
             context_tokens=context_tokens,
             raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
+            api_input_tokens=completion.input_tokens if completion is not None else None,
+            api_output_tokens=completion.output_tokens if completion is not None else None,
             error=error,
         )
 
@@ -679,11 +728,13 @@ class SpiderJoinEvaluation:
         prompt = self._build_baseline_prompt(schema_description, question)
         context_tokens = _context_token_count(schema_description)
         start = time.monotonic()
+        completion: ClaudeCompletion | None = None
         try:
-            answer = self.claude.complete(
+            completion = self.claude.complete_with_usage(
                 system="Answer questions about relational data. If the schema context is insufficient, say so.",
                 prompt=prompt,
             )
+            answer = completion.text
             error = None
         except Exception as exc:
             answer = ""
@@ -698,6 +749,8 @@ class SpiderJoinEvaluation:
             context_tokens=context_tokens,
             raw_response=answer,
             prompt_tokens=_context_token_count(prompt),
+            api_input_tokens=completion.input_tokens if completion is not None else None,
+            api_output_tokens=completion.output_tokens if completion is not None else None,
             error=error,
         )
 
@@ -746,6 +799,8 @@ class SpiderJoinEvaluation:
                 join_count=joins,
                 context_tokens=context_tokens,
                 prompt_tokens=_context_token_count(ranked_prompt),
+                api_input_tokens=result.api_input_tokens,
+                api_output_tokens=result.api_output_tokens,
                 cited_ids=result.cited_ids,
                 generated_sql=generated_sql,
                 error=None,
@@ -757,13 +812,14 @@ class SpiderJoinEvaluation:
             shuffled_tokens = _context_token_count(shuffled_lines)
             shuffled_joins = _join_count(shuffled_evidence)
             shuffled_prompt = self._build_lakeprompt_prompt(question, shuffled_lines)
-            shuffled_answer = self.claude.complete(
+            shuffled_completion = self.claude.complete_with_usage(
                 system=(
                     "Answer questions using only the provided evidence rows. "
                     "If the evidence is insufficient, say so explicitly."
                 ),
                 prompt=shuffled_prompt,
             )
+            shuffled_answer = shuffled_completion.text
             shuffled_cited_ids = [
                 item.evidence_id
                 for item in shuffled_evidence
@@ -779,6 +835,8 @@ class SpiderJoinEvaluation:
                 join_count=shuffled_joins,
                 context_tokens=shuffled_tokens,
                 prompt_tokens=_context_token_count(shuffled_prompt),
+                api_input_tokens=shuffled_completion.input_tokens,
+                api_output_tokens=shuffled_completion.output_tokens,
                 cited_ids=shuffled_cited_ids,
                 generated_sql=generated_sql,
                 error=None,
@@ -1010,6 +1068,8 @@ class SpiderJoinEvaluation:
                 "join_count": condition.join_count,
                 "context_tokens": condition.context_tokens,
                 "prompt_tokens": condition.prompt_tokens,
+                "api_input_tokens": condition.api_input_tokens,
+                "api_output_tokens": condition.api_output_tokens,
                 "cited_ids": condition.cited_ids,
                 "error": condition.error,
             },
@@ -1063,6 +1123,12 @@ class SpiderJoinEvaluation:
                 "mean_latency_seconds": round(sum(c.latency_seconds for c in cond_results) / n, 4) if n else 0,
                 "mean_context_tokens": round(sum(c.context_tokens for c in cond_results) / n, 1) if n else 0,
                 "mean_prompt_tokens": round(sum(c.prompt_tokens for c in cond_results) / n, 1) if n else 0,
+                "mean_api_input_tokens": _mean_optional_int(
+                    [c.api_input_tokens for c in cond_results]
+                ) if n else None,
+                "mean_api_output_tokens": _mean_optional_int(
+                    [c.api_output_tokens for c in cond_results]
+                ) if n else None,
                 "mean_join_count": round(sum(c.join_count for c in cond_results) / n, 2) if n else 0,
                 "error_rate": round(sum(1 for c in cond_results if c.error) / n, 4) if n else 0,
             }
@@ -1126,6 +1192,8 @@ class SpiderJoinEvaluation:
             "- `mean_latency_seconds`: Average wall-clock runtime for that baseline per example.",
             "- `mean_context_tokens`: Average whitespace-token count of the evidence/context portion only.",
             "- `mean_prompt_tokens`: Average whitespace-token count of the full prompt sent to Claude.",
+            "- `mean_api_input_tokens`: Average actual Anthropic API input tokens used for the baseline's answer call.",
+            "- `mean_api_output_tokens`: Average actual Anthropic API output tokens used for the baseline's answer call.",
             "- `mean_join_count`: Average number of distinct join paths used by the evidence for that baseline.",
             "- `error_rate`: Fraction of examples where that baseline recorded an execution or API error.",
             "- `exact_match`: Whether one example's answer exactly matched the ground truth after lowercasing and trimming.",
@@ -1137,6 +1205,8 @@ class SpiderJoinEvaluation:
             "- `join_count`: Number of distinct join paths represented in those evidence rows.",
             "- `context_tokens`: Approximate whitespace-token count of the evidence/context only for one example.",
             "- `prompt_tokens`: Approximate whitespace-token count of the full prompt for one example.",
+            "- `api_input_tokens`: Actual Anthropic API input tokens used for that answer call when available.",
+            "- `api_output_tokens`: Actual Anthropic API output tokens used for that answer call when available.",
             "- `cited_ids`: Evidence IDs cited by the answer when present.",
             "- `error`: Execution or API error captured for that example, if any.",
             "",
@@ -1152,7 +1222,8 @@ class SpiderJoinEvaluation:
                 "| --- | --- |",
             ])
             for key, value in metrics.items():
-                lines.append(f"| `{key}` | `{value}` |")
+                display_value = value if value is not None else "[unknown]"
+                lines.append(f"| `{key}` | `{display_value}` |")
             lines.append("")
 
         lines.extend(["## Examples", ""])
@@ -1245,6 +1316,8 @@ class SpiderJoinEvaluation:
                     f"| `join_count` | `{metrics['join_count']}` |",
                     f"| `context_tokens` | `{metrics['context_tokens']}` |",
                     f"| `prompt_tokens` | `{metrics['prompt_tokens']}` |",
+                    f"| `api_input_tokens` | `{metrics['api_input_tokens'] if metrics['api_input_tokens'] is not None else '[unknown]'}` |",
+                    f"| `api_output_tokens` | `{metrics['api_output_tokens'] if metrics['api_output_tokens'] is not None else '[unknown]'}` |",
                     f"| `cited_ids` | `{cited_ids}` |",
                     f"| `error` | `{metrics['error'] or '[none]'}` |",
                     "",

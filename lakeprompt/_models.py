@@ -151,12 +151,18 @@ class LakeAnswer:
         cited_ids: Evidence IDs cited by the model when available.
         raw_response: Exact raw text returned by the final answer LLM.
         prompt: Final prompt string sent to the model when available.
+        api_input_tokens: Actual Anthropic API input tokens used for the
+            final answer call when available.
+        api_output_tokens: Actual Anthropic API output tokens used for the
+            final answer call when available.
     """
     text: str
     evidence: list[JoinedTuple]
     cited_ids: list[str] = field(default_factory=list)
     raw_response: str = ""
     prompt: str = ""
+    api_input_tokens: int | None = None
+    api_output_tokens: int | None = None
 
 
 @dataclass(frozen=True)

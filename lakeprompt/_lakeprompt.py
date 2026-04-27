@@ -181,8 +181,10 @@ class LakePrompt:
                 cited_ids=[],
                 raw_response="Could not find evidence in the data lake",
                 prompt=context.prompt,
+                api_input_tokens=None,
+                api_output_tokens=None,
             )
-        answer_text, cited_ids, raw_response = self._llm_complete(
+        answer_text, cited_ids, raw_response, api_input_tokens, api_output_tokens = self._llm_complete(
             context.prompt,
             valid_ids={item.evidence_id for item in context.evidence},
         )
@@ -193,6 +195,8 @@ class LakePrompt:
             cited_ids=cited_ids,
             raw_response=raw_response,
             prompt=context.prompt,
+            api_input_tokens=api_input_tokens,
+            api_output_tokens=api_output_tokens,
         )
 
     def execute_sql(self, sql: str) -> list[dict[str, Any]]:
@@ -214,7 +218,7 @@ class LakePrompt:
         self,
         prompt: str,
         valid_ids: set[str] | None = None,
-    ) -> tuple[str, list[str], str]:
+    ) -> tuple[str, list[str], str, int | None, int | None]:
         """
         Send a packaged prompt to the LLM and return the answer text plus citations.
 
@@ -232,7 +236,8 @@ class LakePrompt:
                 returned citation list.
 
         Returns:
-            A tuple of `(answer_text, cited_ids, raw_response)`.
+            A tuple of `(answer_text, cited_ids, raw_response,
+            api_input_tokens, api_output_tokens)`.
         """
         api_key = os.environ.get("ANTHROPIC_API_KEY")
         if not api_key:
@@ -246,6 +251,9 @@ class LakePrompt:
             temperature=0,
             messages=[{"role": "user", "content": prompt}],
         )
+        usage = getattr(response, "usage", None)
+        api_input_tokens = getattr(usage, "input_tokens", None)
+        api_output_tokens = getattr(usage, "output_tokens", None)
 
         raw = "".join(
             block.text for block in response.content if getattr(block, "type", None) == "text"
@@ -265,9 +273,9 @@ class LakePrompt:
                 item for item in cited_ids
                 if isinstance(item, str) and (valid_ids is None or item in valid_ids)
             ]
-            return answer_text, normalized_ids, raw
+            return answer_text, normalized_ids, raw, api_input_tokens, api_output_tokens
         except json.JSONDecodeError:
-            return raw, [], raw
+            return raw, [], raw, api_input_tokens, api_output_tokens
 
     def _plan_query(self, question: str, cards) -> QueryPlan:
         """
