@@ -2,6 +2,46 @@
 
 LakePrompt is a Python research prototype for answering natural-language questions over a data lake of CSV files. It profiles columns, retrieves relevant schema signals, plans joins, executes SQL over a local SQLite database, packages evidence for an LLM, and returns grounded answers with citations.
 
+## Quick Start
+
+To run the interactive CLI demo against the Spider Join ZIP dataset on GitHub:
+
+```bash
+git clone git@github.com:jacob-erard-professional/LakePrompt.git
+cd LakePrompt
+
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
+export ANTHROPIC_API_KEY="your_api_key_here"
+export HF_TOKEN="your_hf_token_here"
+
+python3 run.py --database_link https://github.com/superctj/spider-join-data/raw/main/data.zip
+```
+
+After `run.py` finishes initializing the lake, it drops into an interactive prompt. You can then keep asking questions against the same database until you type `exit` or `quit`.
+
+Example:
+
+```text
+> What are the distinct creation years of the departments managed by a secretary born in state 'Alabama'?
+> Show the years and the official names of the host cities of competitions.
+> exit
+```
+
+The CLI also prints lightweight stage updates while each query runs so you can see where the pipeline is spending time.
+
+Example questions you can try on the Spider Join demo data:
+
+- `What are the distinct creation years of the departments managed by a secretary born in state 'Alabama'?`
+- `Show the years and the official names of the host cities of competitions.`
+- `What details do we have on the students who registered for courses most recently?`
+- `Which department has more than 1 head at a time? List the id, name and the number of heads.`
+
+If you want to ask your own questions, you will usually need to inspect the data first to understand which tables and columns are actually present in the lake. In practice, that means looking through the CSV files or repository contents before writing questions, especially for unfamiliar GitHub datasets. LakePrompt can help answer questions over the data, but it does not replace knowing the dataset structure well enough to ask meaningful questions in the first place.
+
 The repository currently includes:
 
 - the core `lakeprompt` package

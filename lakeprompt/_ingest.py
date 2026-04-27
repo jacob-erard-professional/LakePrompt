@@ -197,6 +197,8 @@ class _DataLakePreparer:
         with zipfile.ZipFile(archive_path) as handle:
             handle.extractall(extract_dir)
 
+        self._extract_nested_zip_archives(extract_dir)
+
         copied = 0
         used_names: set[str] = set()
         for csv_path in sorted(extract_dir.rglob("*.csv")):
@@ -206,6 +208,30 @@ class _DataLakePreparer:
 
         if copied == 0:
             raise ValueError(f"No CSV files found in archive: {archive_path}")
+
+    def _extract_nested_zip_archives(self, root_dir: Path) -> None:
+        """
+        Recursively unpack nested ZIP files under an extracted source tree.
+
+        Some benchmark repositories ship the actual CSV tables inside an
+        inner archive such as `data.zip`. This helper expands those nested
+        archives in place before CSV discovery runs.
+        """
+        processed: set[Path] = set()
+
+        while True:
+            nested_archives = sorted(path for path in root_dir.rglob("*.zip") if path not in processed)
+            if not nested_archives:
+                return
+
+            for archive_path in nested_archives:
+                processed.add(archive_path)
+                nested_dir = archive_path.with_suffix("")
+                if nested_dir.exists():
+                    shutil.rmtree(nested_dir)
+                nested_dir.mkdir(parents=True, exist_ok=True)
+                with zipfile.ZipFile(archive_path) as handle:
+                    handle.extractall(nested_dir)
 
     def _unique_csv_name(self, csv_path: Path, used_names: set[str]) -> str:
         """
