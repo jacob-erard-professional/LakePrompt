@@ -8,7 +8,7 @@
 ## Metric Glossary
 
 - `exact_match_rate`: Fraction of examples where the answer text exactly matches the ground truth after lowercasing and trimming.
-- `mean_token_f1`: Average token-overlap F1 between the answer text and ground truth.
+- `mean_ground_truth_coverage`: Average fraction of ground-truth tokens/atoms found in the answer.
 - `mean_faithfulness`: Average fraction of valid evidence IDs cited or mentioned in the answer.
 - `mean_latency_seconds`: Average wall-clock runtime for that baseline per example.
 - `mean_context_tokens`: Average whitespace-token count of the evidence/context portion only.
@@ -16,7 +16,7 @@
 - `mean_join_count`: Average number of distinct join paths used by the evidence for that baseline.
 - `error_rate`: Fraction of examples where that baseline recorded an execution or API error.
 - `exact_match`: Whether one example's answer exactly matched the ground truth after lowercasing and trimming.
-- `token_f1`: Token-overlap F1 for one example.
+- `ground_truth_coverage`: Fraction of the ground truth contained in the answer for one example.
 - `faithfulness`: Fraction of valid evidence IDs cited or explicitly mentioned for one example.
 - `latency_seconds`: Runtime for one example.
 - `evidence_count`: Number of evidence rows returned for one example.
@@ -34,7 +34,7 @@
 | --- | --- |
 | `n` | `50` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0027` |
+| `mean_ground_truth_coverage` | `0.0027` |
 | `mean_faithfulness` | `0.0` |
 | `mean_latency_seconds` | `3.439` |
 | `mean_context_tokens` | `0.0` |
@@ -48,7 +48,7 @@
 | --- | --- |
 | `n` | `50` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0111` |
+| `mean_ground_truth_coverage` | `0.0111` |
 | `mean_faithfulness` | `0.0` |
 | `mean_latency_seconds` | `2.8911` |
 | `mean_context_tokens` | `59.1` |
@@ -62,7 +62,7 @@
 | --- | --- |
 | `n` | `50` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0487` |
+| `mean_ground_truth_coverage` | `0.0487` |
 | `mean_faithfulness` | `0.0` |
 | `mean_latency_seconds` | `4.1234` |
 | `mean_context_tokens` | `254.2` |
@@ -76,7 +76,7 @@
 | --- | --- |
 | `n` | `50` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0354` |
+| `mean_ground_truth_coverage` | `0.0354` |
 | `mean_faithfulness` | `0.0` |
 | `mean_latency_seconds` | `4.9582` |
 | `mean_context_tokens` | `309.1` |
@@ -90,7 +90,7 @@
 | --- | --- |
 | `n` | `50` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0801` |
+| `mean_ground_truth_coverage` | `0.0801` |
 | `mean_faithfulness` | `0.2227` |
 | `mean_latency_seconds` | `6.8495` |
 | `mean_context_tokens` | `17.3` |
@@ -104,7 +104,7 @@
 | --- | --- |
 | `n` | `50` |
 | `exact_match_rate` | `0.06` |
-| `mean_token_f1` | `0.2332` |
+| `mean_ground_truth_coverage` | `0.2332` |
 | `mean_faithfulness` | `0.6727` |
 | `mean_latency_seconds` | `4.3131` |
 | `mean_context_tokens` | `17.3` |
@@ -161,7 +161,7 @@ Without access to this data, I cannot provide the distinct creation years of dep
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.566` |
 | `evidence_count` | `0` |
@@ -199,7 +199,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.452` |
 | `evidence_count` | `3` |
@@ -261,7 +261,7 @@ The data is insufficient to answer the question as it stands.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.505` |
 | `evidence_count` | `3` |
@@ -328,7 +328,7 @@ To answer this question, I would need sample data that shows the actual relation
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.536` |
 | `evidence_count` | `0` |
@@ -371,7 +371,7 @@ To answer this question, I would need evidence that includes information about s
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.024` |
+| `ground_truth_coverage` | `0.024` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `12.563` |
 | `evidence_count` | `1` |
@@ -421,7 +421,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `True` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `9.814` |
 | `evidence_count` | `1` |
@@ -486,7 +486,7 @@ If you can provide the database schema or table structure, I'd be happy to help 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.657` |
 | `evidence_count` | `0` |
@@ -524,7 +524,7 @@ I cannot answer this question using only the provided rows. The table shown only
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.192` |
 | `evidence_count` | `3` |
@@ -586,7 +586,7 @@ Note: The data is insufficient to provide complete results because department_id
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.014` |
+| `ground_truth_coverage` | `0.014` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.546` |
 | `evidence_count` | `3` |
@@ -663,7 +663,7 @@ But I would need the complete dataset to provide accurate results.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.011` |
+| `ground_truth_coverage` | `0.011` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.317` |
 | `evidence_count` | `0` |
@@ -702,7 +702,7 @@ The provided evidence rows only contain department names and employee counts for
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.090` |
+| `ground_truth_coverage` | `0.090` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.413` |
 | `evidence_count` | `2` |
@@ -768,7 +768,7 @@ Treasury: 115,897 employees; Homeland Security: 208,000 employees
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.429` |
+| `ground_truth_coverage` | `0.429` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `3.979` |
 | `evidence_count` | `2` |
@@ -824,7 +824,7 @@ Could you please provide the relevant data or clarify what specific dataset you'
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.822` |
 | `evidence_count` | `0` |
@@ -864,7 +864,7 @@ To answer your question about the distinct ages of heads who are acting, I would
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.501` |
 | `evidence_count` | `3` |
@@ -921,7 +921,7 @@ Since the head table doesn't include the heads who are marked as acting in the m
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.985` |
 | `evidence_count` | `3` |
@@ -988,7 +988,7 @@ To answer this question properly, I would need sample data that includes the hea
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.331` |
 | `evidence_count` | `0` |
@@ -1033,7 +1033,7 @@ To properly answer this question, I would need evidence that explicitly identifi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.071` |
+| `ground_truth_coverage` | `0.071` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.802` |
 | `evidence_count` | `3` |
@@ -1108,7 +1108,7 @@ The distinct ages of the heads who are acting are 52, 53, and 69.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `3.405` |
 | `evidence_count` | `3` |
@@ -1158,7 +1158,7 @@ This information changes with different presidential administrations, and withou
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.147` |
 | `evidence_count` | `0` |
@@ -1204,7 +1204,7 @@ To answer this question, I would need a different table or additional data that 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.984` |
 | `evidence_count` | `3` |
@@ -1260,7 +1260,7 @@ The provided rows are insufficient to answer this question.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.445` |
 | `evidence_count` | `3` |
@@ -1328,7 +1328,7 @@ To answer this question, I would need:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.728` |
 | `evidence_count` | `0` |
@@ -1364,7 +1364,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.063` |
 | `evidence_count` | `0` |
@@ -1400,7 +1400,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.395` |
 | `evidence_count` | `0` |
@@ -1456,7 +1456,7 @@ Could you please provide the relevant data or specify which dataset you'd like m
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.288` |
 | `evidence_count` | `0` |
@@ -1494,7 +1494,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.374` |
 | `evidence_count` | `3` |
@@ -1555,7 +1555,7 @@ Therefore, the Treasury department (ID: 2) has more than 1 head at a time, with 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.061` |
+| `ground_truth_coverage` | `0.061` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.69` |
 | `evidence_count` | `3` |
@@ -1625,7 +1625,7 @@ From the available sample data:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.037` |
+| `ground_truth_coverage` | `0.037` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.652` |
 | `evidence_count` | `0` |
@@ -1670,7 +1670,7 @@ This is the only department in the evidence that shows a count_head_id greater t
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.105` |
+| `ground_truth_coverage` | `0.105` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.844` |
 | `evidence_count` | `4` |
@@ -1774,7 +1774,7 @@ Treasury (department_id: 2, name: Treasury, number of heads: 2)
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.500` |
+| `ground_truth_coverage` | `0.500` |
 | `faithfulness` | `0.250` |
 | `latency_seconds` | `4.659` |
 | `evidence_count` | `4` |
@@ -1835,7 +1835,7 @@ Once you provide this information, I'll be happy to help you retrieve the years 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.688` |
 | `evidence_count` | `0` |
@@ -1879,7 +1879,7 @@ To answer this question, I would need additional data that links cities to compe
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.705` |
 | `evidence_count` | `3` |
@@ -1940,7 +1940,7 @@ This information comes from joining the farm_competition table (which contains t
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.240` |
+| `ground_truth_coverage` | `0.240` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.392` |
 | `evidence_count` | `3` |
@@ -2012,7 +2012,7 @@ This result comes from joining the `farm_competition` table (which contains the 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.191` |
+| `ground_truth_coverage` | `0.191` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.153` |
 | `evidence_count` | `0` |
@@ -2063,7 +2063,7 @@ However, the evidence does not include the official names of the host cities cor
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.126` |
+| `ground_truth_coverage` | `0.126` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `9.419` |
 | `evidence_count` | `6` |
@@ -2183,7 +2183,7 @@ The evidence shows competition years (2006, 2005, 2004, 2013, 2002, 2003) and ho
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.235` |
+| `ground_truth_coverage` | `0.235` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `6.518` |
 | `evidence_count` | `6` |
@@ -2238,7 +2238,7 @@ Could you please provide more details or the specific data you'd like me to work
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.004` |
 | `evidence_count` | `0` |
@@ -2282,7 +2282,7 @@ The provided data only shows basic city information like area, population, censu
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.731` |
 | `evidence_count` | `3` |
@@ -2349,7 +2349,7 @@ I was able to match each competition to its host city using the host_city_id fro
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.186` |
+| `ground_truth_coverage` | `0.186` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.794` |
 | `evidence_count` | `3` |
@@ -2419,7 +2419,7 @@ The information comes from joining the `farm_competition` table (which contains 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.200` |
+| `ground_truth_coverage` | `0.200` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.122` |
 | `evidence_count` | `0` |
@@ -2469,7 +2469,7 @@ However, the evidence does not include the official names of the cities correspo
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.103` |
+| `ground_truth_coverage` | `0.103` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.669` |
 | `evidence_count` | `6` |
@@ -2589,7 +2589,7 @@ The evidence shows competition years and host city IDs but does not contain the 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.160` |
+| `ground_truth_coverage` | `0.160` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.636` |
 | `evidence_count` | `6` |
@@ -2645,7 +2645,7 @@ Could you please provide the relevant data or specify which particular type of c
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.887` |
 | `evidence_count` | `0` |
@@ -2683,7 +2683,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `1.865` |
 | `evidence_count` | `3` |
@@ -2745,7 +2745,7 @@ Therefore, there are no cities in the provided data that have hosted more than o
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.147` |
 | `evidence_count` | `3` |
@@ -2811,7 +2811,7 @@ The sample data provided is insufficient to identify any city that has hosted mu
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.942` |
 | `evidence_count` | `0` |
@@ -2857,7 +2857,7 @@ To answer this question, I would need evidence that includes both the city names
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.81` |
 | `evidence_count` | `5` |
@@ -2953,7 +2953,7 @@ The provided evidence only contains host city IDs (1, 2, 3, 4, 5) but does not i
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.825` |
 | `evidence_count` | `5` |
@@ -3009,7 +3009,7 @@ Could you please provide the relevant data or specify what competitions and data
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.079` |
 | `evidence_count` | `0` |
@@ -3047,7 +3047,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.026` |
 | `evidence_count` | `3` |
@@ -3109,7 +3109,7 @@ Therefore, based on the given rows, **no cities have hosted more than one compet
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.058` |
 | `evidence_count` | `3` |
@@ -3175,7 +3175,7 @@ The sample data provided is insufficient to identify any city that has hosted mo
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.466` |
 | `evidence_count` | `0` |
@@ -3222,7 +3222,7 @@ To answer this question, I would need evidence that includes city names and comp
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.538` |
 | `evidence_count` | `5` |
@@ -3318,7 +3318,7 @@ The provided evidence only contains host city IDs (1, 2, 3, 4, 5) but does not i
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.394` |
 | `evidence_count` | `5` |
@@ -3367,7 +3367,7 @@ Could you please provide the relevant data or clarify what specific dataset you'
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.745` |
 | `evidence_count` | `0` |
@@ -3405,7 +3405,7 @@ I cannot answer this question using only the provided rows. The table contains i
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.035` |
 | `evidence_count` | `3` |
@@ -3477,7 +3477,7 @@ Since there's a three-way tie, the answer could be any of these statuses. The fi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.013` |
+| `ground_truth_coverage` | `0.013` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.904` |
 | `evidence_count` | `3` |
@@ -3543,7 +3543,7 @@ To properly answer which city has hosted the greatest number of competitions, I 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.326` |
 | `evidence_count` | `0` |
@@ -3579,7 +3579,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.996` |
 | `evidence_count` | `0` |
@@ -3615,7 +3615,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.452` |
 | `evidence_count` | `0` |
@@ -3671,7 +3671,7 @@ Could you please provide the relevant data or specify what competitions and type
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.546` |
 | `evidence_count` | `0` |
@@ -3709,7 +3709,7 @@ I cannot answer this question using only the provided rows. The table contains i
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `1.943` |
 | `evidence_count` | `3` |
@@ -3778,7 +3778,7 @@ The data shows a tie, so there isn't one clear city that has hosted more competi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.012` |
+| `ground_truth_coverage` | `0.012` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.091` |
 | `evidence_count` | `3` |
@@ -3844,7 +3844,7 @@ To properly answer which city has hosted the most competitions, I would need to 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.787` |
 | `evidence_count` | `0` |
@@ -3887,7 +3887,7 @@ To answer this question, I would need evidence showing which city has hosted the
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `7.812` |
 | `evidence_count` | `1` |
@@ -3939,7 +3939,7 @@ Looking at the evidence provided, I can see that evidence E1 shows the city with
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.784` |
 | `evidence_count` | `1` |
@@ -3990,7 +3990,7 @@ Could you please provide the relevant data or clarify what specific dataset you'
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.091` |
 | `evidence_count` | `0` |
@@ -4030,7 +4030,7 @@ The provided data only shows three cities with their populations, areas, and adm
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.024` |
+| `ground_truth_coverage` | `0.024` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.092` |
 | `evidence_count` | `3` |
@@ -4103,7 +4103,7 @@ The themes of competitions with host cities having populations larger than 1000 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.124` |
+| `ground_truth_coverage` | `0.124` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.71` |
 | `evidence_count` | `3` |
@@ -4175,7 +4175,7 @@ All three competitions in the sample data meet the criteria, as all host cities 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.167` |
+| `ground_truth_coverage` | `0.167` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.107` |
 | `evidence_count` | `0` |
@@ -4211,7 +4211,7 @@ I cannot answer this question because no evidence was provided. The evidence sec
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.038` |
+| `ground_truth_coverage` | `0.038` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.172` |
 | `evidence_count` | `0` |
@@ -4247,7 +4247,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.627` |
 | `evidence_count` | `0` |
@@ -4303,7 +4303,7 @@ Could you please provide the relevant data or specify which dataset you'd like m
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.189` |
 | `evidence_count` | `0` |
@@ -4341,7 +4341,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.026` |
+| `ground_truth_coverage` | `0.026` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.952` |
 | `evidence_count` | `3` |
@@ -4412,7 +4412,7 @@ Therefore, the themes of competitions that have corresponding host cities with m
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.114` |
+| `ground_truth_coverage` | `0.114` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.978` |
 | `evidence_count` | `3` |
@@ -4492,7 +4492,7 @@ All three host cities have populations greater than 1,000 residents, so the them
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.140` |
+| `ground_truth_coverage` | `0.140` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.353` |
 | `evidence_count` | `0` |
@@ -4540,7 +4540,7 @@ To answer this question, I would need evidence that includes host city informati
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.298` |
+| `ground_truth_coverage` | `0.298` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.23` |
 | `evidence_count` | `6` |
@@ -4648,7 +4648,7 @@ I cannot determine which competition themes have host cities with more than 1000
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.467` |
 | `evidence_count` | `6` |
@@ -4704,7 +4704,7 @@ Could you please provide the relevant data or specify which educational institut
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.573` |
 | `evidence_count` | `0` |
@@ -4744,7 +4744,7 @@ The addresses table contains information about addresses (address_id, city, coun
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.893` |
 | `evidence_count` | `3` |
@@ -4837,7 +4837,7 @@ Looking at the student_course_registrations table, I can count the registrations
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.027` |
+| `ground_truth_coverage` | `0.027` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.969` |
 | `evidence_count` | `3` |
@@ -4942,7 +4942,7 @@ However, I should note that this conclusion is based only on the sample rows pro
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.017` |
+| `ground_truth_coverage` | `0.017` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.262` |
 | `evidence_count` | `0` |
@@ -4980,7 +4980,7 @@ The provided evidence only shows that the "statistics" course has 16 registered 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.047` |
+| `ground_truth_coverage` | `0.047` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.56` |
 | `evidence_count` | `1` |
@@ -5032,7 +5032,7 @@ statistics
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `True` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.464` |
 | `evidence_count` | `1` |
@@ -5088,7 +5088,7 @@ Could you please provide the relevant data about courses and their enrollment nu
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.84` |
 | `evidence_count` | `0` |
@@ -5128,7 +5128,7 @@ To answer your question, I would need data from a table that contains course inf
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.302` |
 | `evidence_count` | `3` |
@@ -5215,7 +5215,7 @@ Therefore, the course with the most registered students is **statistics**.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.031` |
+| `ground_truth_coverage` | `0.031` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `1.91` |
 | `evidence_count` | `3` |
@@ -5329,7 +5329,7 @@ LIMIT 1;
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.014` |
+| `ground_truth_coverage` | `0.014` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.852` |
 | `evidence_count` | `0` |
@@ -5367,7 +5367,7 @@ The evidence only shows one course - "statistics" with 16 registered students. T
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.035` |
+| `ground_truth_coverage` | `0.035` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.296` |
 | `evidence_count` | `1` |
@@ -5419,7 +5419,7 @@ statistics
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `True` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `3.205` |
 | `evidence_count` | `1` |
@@ -5475,7 +5475,7 @@ Could you please share the relevant data or specify where this information shoul
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.046` |
 | `evidence_count` | `0` |
@@ -5513,7 +5513,7 @@ I cannot answer this question using only the provided rows. The table shown is a
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.647` |
 | `evidence_count` | `3` |
@@ -5604,7 +5604,7 @@ Matching these with the people table using the person_id:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.122` |
+| `ground_truth_coverage` | `0.122` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.379` |
 | `evidence_count` | `3` |
@@ -5709,7 +5709,7 @@ To properly answer this question, I would need either:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.927` |
 | `evidence_count` | `0` |
@@ -5754,7 +5754,7 @@ The provided evidence rows only contain first names for each candidate (Jack, Le
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.125` |
 | `evidence_count` | `8` |
@@ -5886,7 +5886,7 @@ The provided evidence only contains single names in the candidate_details field:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.558` |
 | `evidence_count` | `8` |
@@ -5942,7 +5942,7 @@ Could you please share the relevant data or specify which candidates you're refe
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.272` |
 | `evidence_count` | `0` |
@@ -5982,7 +5982,7 @@ To answer the question about candidates' names, I would need access to a differe
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.27` |
 | `evidence_count` | `3` |
@@ -6075,7 +6075,7 @@ The first and last names of all candidates are:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.141` |
+| `ground_truth_coverage` | `0.141` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.585` |
 | `evidence_count` | `3` |
@@ -6180,7 +6180,7 @@ To properly answer this question, I would need either:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.58` |
 | `evidence_count` | `0` |
@@ -6225,7 +6225,7 @@ The provided evidence rows only contain single names for each candidate (Cindy, 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.94` |
 | `evidence_count` | `8` |
@@ -6357,7 +6357,7 @@ The candidates are: Robert, Alex, Jane, Cindy, Jack, Leo, Tao, and Robin. Howeve
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `3.725` |
 | `evidence_count` | `8` |
@@ -6418,7 +6418,7 @@ Once I have access to the relevant data, I'll be able to give you the specific s
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.028` |
+| `ground_truth_coverage` | `0.028` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.877` |
 | `evidence_count` | `0` |
@@ -6458,7 +6458,7 @@ To answer your question about student IDs for courses and course names, I would 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.021` |
+| `ground_truth_coverage` | `0.021` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.086` |
 | `evidence_count` | `3` |
@@ -6549,7 +6549,7 @@ So the complete list shows student IDs 111 and 121 have course registrations, wi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.172` |
+| `ground_truth_coverage` | `0.172` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.873` |
 | `evidence_count` | `3` |
@@ -6665,7 +6665,7 @@ Note: This is based on the sample data provided. The complete answer would depen
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.109` |
+| `ground_truth_coverage` | `0.109` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.206` |
 | `evidence_count` | `0` |
@@ -6723,7 +6723,7 @@ To summarize all the courses mentioned in the evidence:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.392` |
+| `ground_truth_coverage` | `0.392` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.723` |
 | `evidence_count` | `9` |
@@ -6903,7 +6903,7 @@ The student IDs and their corresponding course names are: Student 161 in English
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.545` |
+| `ground_truth_coverage` | `0.545` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.854` |
 | `evidence_count` | `9` |
@@ -6959,7 +6959,7 @@ If you have specific data you'd like me to analyze, please provide it and I'll b
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.568` |
 | `evidence_count` | `0` |
@@ -6999,7 +6999,7 @@ To answer this question, I would need access to tables containing student inform
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.684` |
 | `evidence_count` | `3` |
@@ -7087,7 +7087,7 @@ Therefore, the detail of the student who most recently registered for a course i
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.023` |
+| `ground_truth_coverage` | `0.023` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.729` |
 | `evidence_count` | `3` |
@@ -7192,7 +7192,7 @@ However, I should note that this answer is based only on the sample rows provide
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.017` |
+| `ground_truth_coverage` | `0.017` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.442` |
 | `evidence_count` | `0` |
@@ -7235,7 +7235,7 @@ To determine which student most recently registered for a course, I would need e
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.027` |
+| `ground_truth_coverage` | `0.027` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `8.651` |
 | `evidence_count` | `1` |
@@ -7288,7 +7288,7 @@ The student who most recently registered for a course is Martin (student ID: 121
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.125` |
+| `ground_truth_coverage` | `0.125` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `3.622` |
 | `evidence_count` | `1` |
@@ -7349,7 +7349,7 @@ If you have specific data you'd like me to analyze, please share it and I'll be 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.222` |
 | `evidence_count` | `0` |
@@ -7389,7 +7389,7 @@ To answer this question, I would need data from tables that contain student info
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.632` |
 | `evidence_count` | `3` |
@@ -7478,7 +7478,7 @@ So the student who registered for courses most recently is Martin (student ID 12
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.021` |
+| `ground_truth_coverage` | `0.021` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.219` |
 | `evidence_count` | `3` |
@@ -7587,7 +7587,7 @@ To properly answer this question, I would need the complete dataset to identify 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.011` |
+| `ground_truth_coverage` | `0.011` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.125` |
 | `evidence_count` | `0` |
@@ -7658,7 +7658,7 @@ Based on the provided evidence, Martin with student ID 121 is the only student w
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.015` |
+| `ground_truth_coverage` | `0.015` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `11.934` |
 | `evidence_count` | `20` |
@@ -8081,7 +8081,7 @@ The student with this most recent registration is:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.024` |
+| `ground_truth_coverage` | `0.024` |
 | `faithfulness` | `0.050` |
 | `latency_seconds` | `7.064` |
 | `evidence_count` | `20` |
@@ -8138,7 +8138,7 @@ Could you please provide the relevant data or clarify what specific information 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.269` |
 | `evidence_count` | `0` |
@@ -8178,7 +8178,7 @@ To answer this question, I would need data from tables that contain information 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.651` |
 | `evidence_count` | `3` |
@@ -8268,7 +8268,7 @@ Therefore, **0 students** attend the English course based on the provided data.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.778` |
 | `evidence_count` | `3` |
@@ -8371,7 +8371,7 @@ Based on the sample data provided, **0 students** have attendance records for th
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.587` |
 | `evidence_count` | `0` |
@@ -8409,7 +8409,7 @@ The provided evidence (E1) only shows a count of 4 student IDs, but it doesn't s
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `7.9` |
 | `evidence_count` | `1` |
@@ -8460,7 +8460,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.26` |
 | `evidence_count` | `1` |
@@ -8516,7 +8516,7 @@ Could you please provide the relevant data or specify which particular English p
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.574` |
 | `evidence_count` | `0` |
@@ -8556,7 +8556,7 @@ To answer this question, I would need data from tables that contain information 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.846` |
 | `evidence_count` | `3` |
@@ -8648,7 +8648,7 @@ Therefore, **0 students are attending English courses** based on the provided da
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.612` |
 | `evidence_count` | `3` |
@@ -8757,7 +8757,7 @@ To get the complete answer, you would need to query the full `student_course_att
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.377` |
 | `evidence_count` | `0` |
@@ -8795,7 +8795,7 @@ The provided evidence (E1) only shows a count of 4 student IDs, but it doesn't s
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.982` |
 | `evidence_count` | `1` |
@@ -8846,7 +8846,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `2.803` |
 | `evidence_count` | `1` |
@@ -8898,7 +8898,7 @@ If you have this data available, please share it and I'll be happy to help you f
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `1.631` |
 | `evidence_count` | `0` |
@@ -8938,7 +8938,7 @@ To answer this question, I would need data from a different table that contains 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.536` |
 | `evidence_count` | `3` |
@@ -9018,7 +9018,7 @@ The student-related tables (students, student_course_attendance, student_course_
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.983` |
 | `evidence_count` | `3` |
@@ -9119,7 +9119,7 @@ To answer this question, I would need to see the actual attendance records for s
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.687` |
 | `evidence_count` | `0` |
@@ -9157,7 +9157,7 @@ The provided evidence (E1) only shows a count of 4 courses, but it does not spec
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.423` |
 | `evidence_count` | `1` |
@@ -9208,7 +9208,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `2.938` |
 | `evidence_count` | `1` |
@@ -9260,7 +9260,7 @@ If you have this data available, please share it and I'll be happy to help analy
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.026` |
 | `evidence_count` | `0` |
@@ -9300,7 +9300,7 @@ To answer this question, I would need data from a different table that contains 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.848` |
 | `evidence_count` | `3` |
@@ -9385,7 +9385,7 @@ There are no records for student ID 171 in the `student_course_attendance` table
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.771` |
 | `evidence_count` | `3` |
@@ -9486,7 +9486,7 @@ To answer this question, I would need to see the actual attendance records for s
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.254` |
 | `evidence_count` | `0` |
@@ -9524,7 +9524,7 @@ The provided evidence (E1) only shows a count of 4 courses, but it does not spec
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.713` |
 | `evidence_count` | `1` |
@@ -9575,7 +9575,7 @@ The student with id 171 actually attends 4 courses.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `2.961` |
 | `evidence_count` | `1` |
@@ -9626,7 +9626,7 @@ Could you provide the relevant dataset or more context about where this informat
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.722` |
 | `evidence_count` | `0` |
@@ -9664,7 +9664,7 @@ I cannot answer this question using only the provided rows. The table shown is a
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.522` |
 | `evidence_count` | `3` |
@@ -9751,7 +9751,7 @@ Based on the provided rows, there is no candidate with the email address "stanle
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.236` |
 | `evidence_count` | `3` |
@@ -9852,7 +9852,7 @@ To answer this question, I would need to see the actual data that contains the e
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.243` |
 | `evidence_count` | `0` |
@@ -9888,7 +9888,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.003` |
 | `evidence_count` | `0` |
@@ -9924,7 +9924,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.627` |
 | `evidence_count` | `0` |
@@ -9975,7 +9975,7 @@ Could you provide the relevant data or clarify where I should be looking for thi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.031` |
 | `evidence_count` | `0` |
@@ -10013,7 +10013,7 @@ I cannot answer this question using only the provided rows. The table shown is a
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.595` |
 | `evidence_count` | `3` |
@@ -10098,7 +10098,7 @@ None of these match the requested email address "stanley.monahan@example.org". T
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.782` |
 | `evidence_count` | `3` |
@@ -10202,7 +10202,7 @@ Additionally, I would need to understand the relationship between the `people` a
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.714` |
 | `evidence_count` | `0` |
@@ -10238,7 +10238,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.167` |
 | `evidence_count` | `0` |
@@ -10274,7 +10274,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.899` |
 | `evidence_count` | `0` |
@@ -10338,7 +10338,7 @@ If you can provide this data, I'd be happy to help analyze it and find the stude
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.007` |
 | `evidence_count` | `0` |
@@ -10383,7 +10383,7 @@ The addresses table alone does not contain any information about students or cou
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.69` |
 | `evidence_count` | `3` |
@@ -10471,7 +10471,7 @@ Therefore, the detail of the student who registered the most number of courses i
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.336` |
 | `evidence_count` | `3` |
@@ -10589,7 +10589,7 @@ JOIN (
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.925` |
 | `evidence_count` | `0` |
@@ -10634,7 +10634,7 @@ There are conflicting counts for Martin (4 vs 6 courses), making it impossible t
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.020` |
+| `ground_truth_coverage` | `0.020` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `8.429` |
 | `evidence_count` | `3` |
@@ -10727,7 +10727,7 @@ The student who registered for the most number of courses is Nikhil (student ID:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.100` |
+| `ground_truth_coverage` | `0.100` |
 | `faithfulness` | `0.333` |
 | `latency_seconds` | `4.151` |
 | `evidence_count` | `3` |
@@ -10787,7 +10787,7 @@ If you have this data available, please share it and I'll be happy to help analy
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.973` |
 | `evidence_count` | `0` |
@@ -10825,7 +10825,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.254` |
 | `evidence_count` | `3` |
@@ -10913,7 +10913,7 @@ Therefore, the student who registered for the most number of courses is Martin (
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.749` |
 | `evidence_count` | `3` |
@@ -11019,7 +11019,7 @@ However, I should note that this answer is based only on the sample rows provide
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.937` |
 | `evidence_count` | `0` |
@@ -11062,7 +11062,7 @@ Both students are tied with 6 course registrations each. The evidence is insuffi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.027` |
+| `ground_truth_coverage` | `0.027` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.265` |
 | `evidence_count` | `2` |
@@ -11136,7 +11136,7 @@ There are two students tied for the most course registrations with 6 courses eac
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.080` |
+| `ground_truth_coverage` | `0.080` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.763` |
 | `evidence_count` | `2` |
@@ -11204,7 +11204,7 @@ Could you please share the relevant data or dataset you'd like me to analyze?
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.703` |
 | `evidence_count` | `0` |
@@ -11248,7 +11248,7 @@ The addresses table provided does not contain any information about students or 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.931` |
 | `evidence_count` | `3` |
@@ -11336,7 +11336,7 @@ Note: Student ID 131 does not appear in the student_course_registrations table, 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.144` |
+| `ground_truth_coverage` | `0.144` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.805` |
 | `evidence_count` | `3` |
@@ -11455,7 +11455,7 @@ GROUP BY student_id;
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.098` |
+| `ground_truth_coverage` | `0.098` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.815` |
 | `evidence_count` | `0` |
@@ -11507,7 +11507,7 @@ All evidence rows show students with at least one registered course (count_cours
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.220` |
+| `ground_truth_coverage` | `0.220` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.721` |
 | `evidence_count` | `7` |
@@ -11655,7 +11655,7 @@ Student ID 131 has 1 registered course, Student ID 111 has 4 registered courses,
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.317` |
+| `ground_truth_coverage` | `0.317` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.899` |
 | `evidence_count` | `7` |
@@ -11711,7 +11711,7 @@ If you have specific data you'd like me to analyze, please provide it and I'll b
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.981` |
 | `evidence_count` | `0` |
@@ -11756,7 +11756,7 @@ The addresses table does not contain any information about students or course re
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.15` |
 | `evidence_count` | `3` |
@@ -11850,7 +11850,7 @@ Student 131 is not registered for any courses, so they wouldn't be included in t
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.115` |
+| `ground_truth_coverage` | `0.115` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.461` |
 | `evidence_count` | `3` |
@@ -11964,7 +11964,7 @@ The query to get this information would count the number of course registrations
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.110` |
+| `ground_truth_coverage` | `0.110` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.165` |
 | `evidence_count` | `0` |
@@ -12016,7 +12016,7 @@ The evidence shows 7 students who are registered for courses, with their course 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.253` |
+| `ground_truth_coverage` | `0.253` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.187` |
 | `evidence_count` | `7` |
@@ -12164,7 +12164,7 @@ Student 131 is registered for 1 course, student 171 is registered for 4 courses,
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.312` |
+| `ground_truth_coverage` | `0.312` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.343` |
 | `evidence_count` | `7` |
@@ -12220,7 +12220,7 @@ If you have such data available, please share it and I'll be happy to help analy
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.022` |
+| `ground_truth_coverage` | `0.022` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.391` |
 | `evidence_count` | `0` |
@@ -12264,7 +12264,7 @@ The addresses table does not contain any information about courses or student re
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.022` |
+| `ground_truth_coverage` | `0.022` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.94` |
 | `evidence_count` | `3` |
@@ -12356,7 +12356,7 @@ Note: Course 302 (English) appears in the courses table but has no registrations
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.135` |
+| `ground_truth_coverage` | `0.135` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.103` |
 | `evidence_count` | `3` |
@@ -12467,7 +12467,7 @@ Note that this answer is based only on the sample rows provided. The actual data
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.096` |
+| `ground_truth_coverage` | `0.096` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.197` |
 | `evidence_count` | `0` |
@@ -12513,7 +12513,7 @@ The evidence provides complete information showing the count of registered stude
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.267` |
+| `ground_truth_coverage` | `0.267` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.687` |
 | `evidence_count` | `4` |
@@ -12617,7 +12617,7 @@ English: 4 registered students, data structure: 1 registered student, statistics
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.615` |
+| `ground_truth_coverage` | `0.615` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `3.932` |
 | `evidence_count` | `4` |
@@ -12679,7 +12679,7 @@ Once you share the data, I can help you get the course IDs, course names, and st
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.016` |
+| `ground_truth_coverage` | `0.016` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.899` |
 | `evidence_count` | `0` |
@@ -12717,7 +12717,7 @@ I cannot answer the question about course IDs, student registrations, and course
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.030` |
+| `ground_truth_coverage` | `0.030` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.521` |
 | `evidence_count` | `3` |
@@ -12816,7 +12816,7 @@ Summary:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.135` |
+| `ground_truth_coverage` | `0.135` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.41` |
 | `evidence_count` | `3` |
@@ -12931,7 +12931,7 @@ Note: This analysis is based only on the sample rows provided. The complete data
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.109` |
+| `ground_truth_coverage` | `0.109` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.853` |
 | `evidence_count` | `0` |
@@ -12977,7 +12977,7 @@ The evidence shows student registration counts and course names for 4 different 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.222` |
+| `ground_truth_coverage` | `0.222` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.748` |
 | `evidence_count` | `4` |
@@ -13085,7 +13085,7 @@ Course 301 (statistics) has 16 registered students, Course 302 (English) has 4 r
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.410` |
+| `ground_truth_coverage` | `0.410` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.091` |
 | `evidence_count` | `4` |
@@ -13139,7 +13139,7 @@ Could you please provide the relevant data or clarify what dataset you'd like me
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.513` |
 | `evidence_count` | `0` |
@@ -13183,7 +13183,7 @@ To answer your question about finding cell mobile numbers of candidates with "Fa
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.179` |
 | `evidence_count` | `3` |
@@ -13272,7 +13272,7 @@ Therefore, the cell mobile number of the candidate whose assessment code is "Fai
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.047` |
+| `ground_truth_coverage` | `0.047` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.946` |
 | `evidence_count` | `3` |
@@ -13378,7 +13378,7 @@ However, I should note that this answer assumes that the `candidate_id` in the c
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.032` |
+| `ground_truth_coverage` | `0.032` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.165` |
 | `evidence_count` | `0` |
@@ -13414,7 +13414,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.743` |
 | `evidence_count` | `0` |
@@ -13450,7 +13450,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.481` |
 | `evidence_count` | `0` |
@@ -13506,7 +13506,7 @@ If you have this data available, please share it and I'll be happy to help ident
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.57` |
 | `evidence_count` | `0` |
@@ -13551,7 +13551,7 @@ The addresses table provided does not contain any information about candidates, 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.326` |
 | `evidence_count` | `3` |
@@ -13640,7 +13640,7 @@ Therefore, the cell phone number of the candidate that received an assessment co
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.037` |
+| `ground_truth_coverage` | `0.037` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.1` |
 | `evidence_count` | `3` |
@@ -13750,7 +13750,7 @@ Note: This answer is based on the assumption that candidate_id in the candidates
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.027` |
+| `ground_truth_coverage` | `0.027` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.696` |
 | `evidence_count` | `0` |
@@ -13788,7 +13788,7 @@ The provided evidence row (E1) shows that candidate ID 131 received a "Fail" ass
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `6.193` |
 | `evidence_count` | `1` |
@@ -13836,7 +13836,7 @@ The provided evidence does not contain cell phone numbers for candidates with a 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.063` |
 | `evidence_count` | `1` |
@@ -13905,7 +13905,7 @@ Could you please provide the dataset or more context about what data you're work
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.471` |
 | `evidence_count` | `0` |
@@ -13949,7 +13949,7 @@ These are the three unique cities found in the address records provided.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.128` |
+| `ground_truth_coverage` | `0.128` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `1.586` |
 | `evidence_count` | `3` |
@@ -14045,7 +14045,7 @@ Note: I cannot determine the city for person_id 131 because address_id 88 is not
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.052` |
+| `ground_truth_coverage` | `0.052` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.16` |
 | `evidence_count` | `3` |
@@ -14154,7 +14154,7 @@ Note: This answer is based only on the sample rows provided. The complete datase
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.052` |
+| `ground_truth_coverage` | `0.052` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.22` |
 | `evidence_count` | `0` |
@@ -14222,7 +14222,7 @@ The evidence shows 15 distinct cities total.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.378` |
+| `ground_truth_coverage` | `0.378` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.197` |
 | `evidence_count` | `15` |
@@ -14438,7 +14438,7 @@ The distinct cities of addresses are: O'Connellview, Alizeshire, Terencetown, Ne
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.622` |
+| `ground_truth_coverage` | `0.622` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `6.047` |
 | `evidence_count` | `15` |
@@ -14490,7 +14490,7 @@ If you have a dataset containing information about people and their cities of re
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.372` |
 | `evidence_count` | `0` |
@@ -14534,7 +14534,7 @@ These are the three distinct cities found in the city column of the given addres
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.111` |
+| `ground_truth_coverage` | `0.111` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `1.613` |
 | `evidence_count` | `3` |
@@ -14621,7 +14621,7 @@ Note: There is insufficient data to determine the city for person_id 131, as the
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.046` |
+| `ground_truth_coverage` | `0.046` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.946` |
 | `evidence_count` | `3` |
@@ -14731,7 +14731,7 @@ To get a complete answer, you would need to query all records from the `addresse
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.039` |
+| `ground_truth_coverage` | `0.039` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.441` |
 | `evidence_count` | `0` |
@@ -14799,7 +14799,7 @@ These 15 distinct cities are listed in the evidence rows E1 through E15.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.354` |
+| `ground_truth_coverage` | `0.354` |
 | `faithfulness` | `0.133` |
 | `latency_seconds` | `8.408` |
 | `evidence_count` | `15` |
@@ -15015,7 +15015,7 @@ The different cities where people live are: Linnealand, Alizeshire, South Minnie
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.609` |
+| `ground_truth_coverage` | `0.609` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `6.143` |
 | `evidence_count` | `15` |
@@ -15082,7 +15082,7 @@ Could you provide the student data you'd like me to analyze, or clarify what spe
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.706` |
 | `evidence_count` | `0` |
@@ -15126,7 +15126,7 @@ The provided rows only show general address data without any student association
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.354` |
 | `evidence_count` | `3` |
@@ -15230,7 +15230,7 @@ Note: Student 131 (Barry) has address_id 88, but this address is not included in
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.047` |
+| `ground_truth_coverage` | `0.047` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `9.407` |
 | `evidence_count` | `3` |
@@ -15343,7 +15343,7 @@ However, I should note that this is based only on the sample rows provided. The 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.049` |
+| `ground_truth_coverage` | `0.049` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.522` |
 | `evidence_count` | `0` |
@@ -15411,7 +15411,7 @@ The evidence shows 15 distinct cities where students have their addresses.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.359` |
+| `ground_truth_coverage` | `0.359` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.922` |
 | `evidence_count` | `15` |
@@ -15627,7 +15627,7 @@ The distinct cities of addresses are: O'Connellview, Alizeshire, Terencetown, Ha
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.622` |
+| `ground_truth_coverage` | `0.622` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `6.437` |
 | `evidence_count` | `15` |
@@ -15677,7 +15677,7 @@ Could you please provide the relevant data or specify which particular group of 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.865` |
 | `evidence_count` | `0` |
@@ -15721,7 +15721,7 @@ The data provided is insufficient to determine which addresses belong to student
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.052` |
+| `ground_truth_coverage` | `0.052` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.776` |
 | `evidence_count` | `3` |
@@ -15824,7 +15824,7 @@ I cannot determine the city for student 131 (Barry) because their address inform
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.045` |
+| `ground_truth_coverage` | `0.045` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.093` |
 | `evidence_count` | `3` |
@@ -15937,7 +15937,7 @@ To get the complete answer, you would need to run a query against the full datab
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.031` |
+| `ground_truth_coverage` | `0.031` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.15` |
 | `evidence_count` | `0` |
@@ -15973,7 +15973,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.532` |
 | `evidence_count` | `0` |
@@ -16009,7 +16009,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.091` |
+| `ground_truth_coverage` | `0.091` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.399` |
 | `evidence_count` | `0` |
@@ -16066,7 +16066,7 @@ Could you please provide the relevant data or specify which database/table I sho
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.816` |
 | `evidence_count` | `0` |
@@ -16111,7 +16111,7 @@ The addresses table provided does not contain any information about students, co
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.393` |
 | `evidence_count` | `3` |
@@ -16203,7 +16203,7 @@ Therefore, the student IDs who registered for statistics in order of registratio
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.037` |
+| `ground_truth_coverage` | `0.037` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.565` |
 | `evidence_count` | `3` |
@@ -16315,7 +16315,7 @@ Therefore, the student IDs who registered for the statistics course, ordered by 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.031` |
+| `ground_truth_coverage` | `0.031` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.361` |
 | `evidence_count` | `0` |
@@ -16361,7 +16361,7 @@ To answer this question, I would need evidence that includes course information 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.116` |
+| `ground_truth_coverage` | `0.116` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `9.325` |
 | `evidence_count` | `4` |
@@ -16453,7 +16453,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `6.713` |
 | `evidence_count` | `4` |
@@ -16510,7 +16510,7 @@ If you can provide this data (for example, in a table format, CSV file, or datab
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.088` |
 | `evidence_count` | `0` |
@@ -16555,7 +16555,7 @@ To answer your question about student IDs who registered for a statistics course
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.296` |
 | `evidence_count` | `3` |
@@ -16650,7 +16650,7 @@ The student IDs who registered for the statistics course, ordered by registratio
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.036` |
+| `ground_truth_coverage` | `0.036` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.216` |
 | `evidence_count` | `3` |
@@ -16763,7 +16763,7 @@ Therefore, the student IDs who registered for the statistics course, ordered by 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.029` |
+| `ground_truth_coverage` | `0.029` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.527` |
 | `evidence_count` | `0` |
@@ -16809,7 +16809,7 @@ To answer this question, I would need evidence that includes course information 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.114` |
+| `ground_truth_coverage` | `0.114` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.088` |
 | `evidence_count` | `4` |
@@ -16901,7 +16901,7 @@ The student IDs who registered for the statistics course, ordered by registratio
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.364` |
+| `ground_truth_coverage` | `0.364` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.161` |
 | `evidence_count` | `4` |
@@ -16958,7 +16958,7 @@ Could you please provide the relevant data or specify which dataset you'd like m
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.452` |
 | `evidence_count` | `0` |
@@ -17003,7 +17003,7 @@ The addresses table does not contain any of this required information.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.905` |
 | `evidence_count` | `3` |
@@ -17093,7 +17093,7 @@ Ordering by attendance date (earliest first):
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.042` |
+| `ground_truth_coverage` | `0.042` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.98` |
 | `evidence_count` | `3` |
@@ -17206,7 +17206,7 @@ So the answer is: **111, 121** (in order of attendance date)
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.032` |
+| `ground_truth_coverage` | `0.032` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.007` |
 | `evidence_count` | `0` |
@@ -17251,7 +17251,7 @@ To answer this question, I would need evidence that includes course information 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.125` |
+| `ground_truth_coverage` | `0.125` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.294` |
 | `evidence_count` | `4` |
@@ -17343,7 +17343,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `3.916` |
 | `evidence_count` | `4` |
@@ -17400,7 +17400,7 @@ Could you please provide the relevant data or specify which database/dataset you
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.771` |
 | `evidence_count` | `0` |
@@ -17440,7 +17440,7 @@ To answer this question, I would need data from tables containing information ab
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.734` |
 | `evidence_count` | `3` |
@@ -17532,7 +17532,7 @@ The student IDs who attended statistics courses in order of attendance date are:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.034` |
+| `ground_truth_coverage` | `0.034` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.832` |
 | `evidence_count` | `3` |
@@ -17642,7 +17642,7 @@ However, I should note that this answer is based only on the sample rows provide
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.027` |
+| `ground_truth_coverage` | `0.027` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.123` |
 | `evidence_count` | `0` |
@@ -17688,7 +17688,7 @@ To answer this question, I would need evidence that includes course information,
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.111` |
+| `ground_truth_coverage` | `0.111` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.867` |
 | `evidence_count` | `4` |
@@ -17780,7 +17780,7 @@ The student IDs who attended courses in the statistics department in order of at
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.333` |
+| `ground_truth_coverage` | `0.333` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.287` |
 | `evidence_count` | `4` |
@@ -17831,7 +17831,7 @@ Could you please provide the relevant dataset or data source you'd like me to an
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.023` |
+| `ground_truth_coverage` | `0.023` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.398` |
 | `evidence_count` | `0` |
@@ -17869,7 +17869,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.031` |
+| `ground_truth_coverage` | `0.031` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.537` |
 | `evidence_count` | `3` |
@@ -17929,7 +17929,7 @@ Based on the provided rows, there are no stations that have ever had exactly 7 b
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.035` |
+| `ground_truth_coverage` | `0.035` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.872` |
 | `evidence_count` | `3` |
@@ -18002,7 +18002,7 @@ To properly answer this question, I would need access to the complete dataset or
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.029` |
+| `ground_truth_coverage` | `0.029` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.502` |
 | `evidence_count` | `0` |
@@ -18038,7 +18038,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.187` |
 | `evidence_count` | `0` |
@@ -18074,7 +18074,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.544` |
 | `evidence_count` | `0` |
@@ -18124,7 +18124,7 @@ Could you please provide the relevant data about bike stations and their availab
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.012` |
+| `ground_truth_coverage` | `0.012` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.232` |
 | `evidence_count` | `0` |
@@ -18164,7 +18164,7 @@ To answer the question about which stations have ever had 7 bikes available, I w
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.042` |
+| `ground_truth_coverage` | `0.042` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.335` |
 | `evidence_count` | `3` |
@@ -18226,7 +18226,7 @@ The data is insufficient to answer this question as it only contains status info
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.020` |
+| `ground_truth_coverage` | `0.020` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.652` |
 | `evidence_count` | `3` |
@@ -18292,7 +18292,7 @@ To answer this question, I would need to see sample data from the `status` table
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.024` |
+| `ground_truth_coverage` | `0.024` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.757` |
 | `evidence_count` | `0` |
@@ -18328,7 +18328,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.201` |
 | `evidence_count` | `0` |
@@ -18364,7 +18364,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.587` |
 | `evidence_count` | `0` |
@@ -18420,7 +18420,7 @@ Could you please provide the relevant data or dataset you'd like me to analyze?
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.777` |
 | `evidence_count` | `0` |
@@ -18458,7 +18458,7 @@ I cannot answer this question using only the provided rows. The table shown cont
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.108` |
 | `evidence_count` | `3` |
@@ -18522,7 +18522,7 @@ Therefore, I cannot answer this question with the provided data, as the station 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.015` |
+| `ground_truth_coverage` | `0.015` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.039` |
 | `evidence_count` | `3` |
@@ -18601,7 +18601,7 @@ To answer this question completely, I would need the full station table data or 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.010` |
+| `ground_truth_coverage` | `0.010` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.416` |
 | `evidence_count` | `0` |
@@ -18646,7 +18646,7 @@ To answer this question, I would need evidence containing trip data with start s
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.051` |
+| `ground_truth_coverage` | `0.051` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `7.142` |
 | `evidence_count` | `1` |
@@ -18699,7 +18699,7 @@ The station from which the shortest trip started has latitude 37.776617, longitu
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.087` |
+| `ground_truth_coverage` | `0.087` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `4.108` |
 | `evidence_count` | `1` |
@@ -18749,7 +18749,7 @@ Could you please provide the relevant dataset or data source you'd like me to an
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.529` |
 | `evidence_count` | `0` |
@@ -18787,7 +18787,7 @@ I cannot answer this question using only the provided rows. The rows shown are f
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.651` |
 | `evidence_count` | `3` |
@@ -18851,7 +18851,7 @@ Therefore, I cannot answer this question with the provided data, as the station 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.014` |
+| `ground_truth_coverage` | `0.014` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.677` |
 | `evidence_count` | `3` |
@@ -18928,7 +18928,7 @@ To fully answer this question, I would need the station record for station ID 77
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.011` |
+| `ground_truth_coverage` | `0.011` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.401` |
 | `evidence_count` | `0` |
@@ -18964,7 +18964,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.914` |
 | `evidence_count` | `0` |
@@ -19000,7 +19000,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.335` |
 | `evidence_count` | `0` |
@@ -19064,7 +19064,7 @@ Could you please share the data or let me know what format it's in (CSV, databas
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.011` |
+| `ground_truth_coverage` | `0.011` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.537` |
 | `evidence_count` | `0` |
@@ -19107,7 +19107,7 @@ To answer this question, I would need additional data that includes bike availab
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.035` |
+| `ground_truth_coverage` | `0.035` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.959` |
 | `evidence_count` | `3` |
@@ -19173,7 +19173,7 @@ From the **station** table, checking installation dates:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.023` |
+| `ground_truth_coverage` | `0.023` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.667` |
 | `evidence_count` | `3` |
@@ -19247,7 +19247,7 @@ The schema structure supports answering this question, but the limited sample da
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.010` |
+| `ground_truth_coverage` | `0.010` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.049` |
 | `evidence_count` | `0` |
@@ -19292,7 +19292,7 @@ To answer the question about stations with more than 14 bikes available on avera
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.020` |
+| `ground_truth_coverage` | `0.020` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.333` |
 | `evidence_count` | `4` |
@@ -19388,7 +19388,7 @@ The stations that were installed in December are: Franklin at Maple (ID: 21), Re
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.079` |
+| `ground_truth_coverage` | `0.079` |
 | `faithfulness` | `1.000` |
 | `latency_seconds` | `5.96` |
 | `evidence_count` | `4` |
@@ -19447,7 +19447,7 @@ Could you share the data or let me know what format it's in?
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.021` |
+| `ground_truth_coverage` | `0.021` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.395` |
 | `evidence_count` | `0` |
@@ -19490,7 +19490,7 @@ To answer this question, I would need additional data that includes bike availab
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.036` |
+| `ground_truth_coverage` | `0.036` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.922` |
 | `evidence_count` | `3` |
@@ -19564,7 +19564,7 @@ However, I should note that the data provided is insufficient to fully answer th
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.067` |
+| `ground_truth_coverage` | `0.067` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `8.158` |
 | `evidence_count` | `3` |
@@ -19636,7 +19636,7 @@ To properly answer this question, I would need:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.011` |
+| `ground_truth_coverage` | `0.011` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `6.266` |
 | `evidence_count` | `0` |
@@ -19672,7 +19672,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.69` |
 | `evidence_count` | `0` |
@@ -19708,7 +19708,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.4` |
 | `evidence_count` | `0` |
@@ -19763,7 +19763,7 @@ Could you provide the relevant datasets or clarify what data source you'd like m
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.516` |
 | `evidence_count` | `0` |
@@ -19807,7 +19807,7 @@ To answer your question about trip IDs in zip code areas with average mean tempe
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.892` |
 | `evidence_count` | `3` |
@@ -19876,7 +19876,7 @@ Based on the insufficient data provided, I cannot determine which trip IDs meet 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.010` |
+| `ground_truth_coverage` | `0.010` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.259` |
 | `evidence_count` | `3` |
@@ -19951,7 +19951,7 @@ Without access to the complete weather data for all zip codes and the ability to
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.607` |
 | `evidence_count` | `0` |
@@ -19987,7 +19987,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.954` |
 | `evidence_count` | `0` |
@@ -20023,7 +20023,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.427` |
 | `evidence_count` | `0` |
@@ -20086,7 +20086,7 @@ Could you please share more information about your data source?
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.63` |
 | `evidence_count` | `0` |
@@ -20130,7 +20130,7 @@ To answer this question, I would need access to additional tables containing tri
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `3.138` |
 | `evidence_count` | `3` |
@@ -20194,7 +20194,7 @@ The provided data doesn't have the necessary overlap between trip zip codes and 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `5.666` |
 | `evidence_count` | `3` |
@@ -20272,7 +20272,7 @@ To answer this question properly, I would need:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `7.734` |
 | `evidence_count` | `0` |
@@ -20308,7 +20308,7 @@ The evidence is insufficient to answer this question. No evidence rows were prov
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `4.698` |
 | `evidence_count` | `0` |
@@ -20344,7 +20344,7 @@ Could not find evidence in the data lake
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `latency_seconds` | `2.532` |
 | `evidence_count` | `0` |

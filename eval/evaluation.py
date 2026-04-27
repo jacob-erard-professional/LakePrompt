@@ -124,14 +124,15 @@ def _semantic_score(
         return 0.0
 
 
-def _token_recall(prediction: str, ground_truth: str) -> float:
+def _ground_truth_coverage(prediction: str, ground_truth: str) -> float:
     """
-    Compute ground-truth token recall against the prediction.
+    Compute how much of the ground truth is contained in the prediction.
 
-    Measures what fraction of ground truth tokens appear in the prediction,
-    without penalising extra tokens in the response. This is a one-directional
-    metric: a verbose-but-correct answer scores the same as a terse correct
-    answer, whereas a missing key token is penalised.
+    Measures what fraction of ground-truth atoms/tokens appear in the
+    prediction, without penalizing extra tokens in the response. This is a
+    one-directional containment metric: a verbose-but-correct answer scores
+    the same as a terse correct answer, whereas a missing key token is
+    penalized.
 
     For structured SQL-result ground truth, atoms are extracted from the
     parsed JSON payload; for plain text, raw tokens are used.
@@ -141,7 +142,7 @@ def _token_recall(prediction: str, ground_truth: str) -> float:
         ground_truth: Reference answer string.
 
     Returns:
-        Recall score between 0.0 and 1.0.
+        Coverage score between 0.0 and 1.0.
     """
     gt_payload = _parse_answer_payload(ground_truth)
     pred_payload = _parse_answer_payload(prediction)
@@ -228,7 +229,7 @@ class ConditionResult:
     error: str | None = None
     # Filled in after ground truth is available
     exact_match: bool = False
-    token_f1: float = 0.0
+    ground_truth_coverage: float = 0.0
     faithfulness: float = 0.0
     semantic_score: float = 0.0
 
@@ -456,7 +457,7 @@ class SpiderJoinEvaluation:
         evidence_ids = self._evidence_ids_from_condition(lp_result)
         for cond in example.conditions:
             cond.exact_match = _exact_match(cond.answer, example.ground_truth)
-            cond.token_f1 = _token_recall(cond.answer, example.ground_truth)
+            cond.ground_truth_coverage = _ground_truth_coverage(cond.answer, example.ground_truth)
             cond.faithfulness = _faithfulness_score(
                 cond.answer, cond.cited_ids, evidence_ids
             )
@@ -930,7 +931,8 @@ class SpiderJoinEvaluation:
         Ask Claude to generate join-requiring questions and reference answers.
 
         Returns a tuple of (questions, ground_truths). Ground truths are
-        short expected answer strings used for exact match and F1 scoring.
+        short expected answer strings used for exact match and ground-truth
+        coverage scoring.
         """
         join_summary = json.dumps(join_rows[:10], indent=2)
         prompt = f"""
@@ -1000,7 +1002,7 @@ class SpiderJoinEvaluation:
             "generated_sql": condition.generated_sql,
             "scoring_metrics": {
                 "exact_match": condition.exact_match,
-                "token_f1": condition.token_f1,
+                "ground_truth_coverage": condition.ground_truth_coverage,
                 "faithfulness": condition.faithfulness,
                 "semantic_score": condition.semantic_score,
                 "latency_seconds": condition.latency_seconds,
@@ -1053,7 +1055,9 @@ class SpiderJoinEvaluation:
             aggregate[name] = {
                 "n": n,
                 "exact_match_rate": round(sum(c.exact_match for c in cond_results) / n, 4) if n else 0,
-                "mean_token_f1": round(sum(c.token_f1 for c in cond_results) / n, 4) if n else 0,
+                "mean_ground_truth_coverage": round(
+                    sum(c.ground_truth_coverage for c in cond_results) / n, 4
+                ) if n else 0,
                 "mean_faithfulness": round(sum(c.faithfulness for c in cond_results) / n, 4) if n else 0,
                 "mean_semantic_score": round(sum(c.semantic_score for c in cond_results) / n, 4) if n else 0,
                 "mean_latency_seconds": round(sum(c.latency_seconds for c in cond_results) / n, 4) if n else 0,
@@ -1116,7 +1120,7 @@ class SpiderJoinEvaluation:
             "## Metric Glossary",
             "",
             "- `exact_match_rate`: Fraction of examples where the answer text exactly matches the ground truth after lowercasing and trimming.",
-            "- `mean_token_f1`: Average ground-truth token recall (fraction of ground truth tokens found in the answer).",
+            "- `mean_ground_truth_coverage`: Average fraction of ground-truth tokens/atoms found in the answer.",
             "- `mean_faithfulness`: Average fraction of valid evidence IDs cited or mentioned in the answer.",
             "- `mean_semantic_score`: Average Claude-judged semantic correctness (0, 0.5, or 1).",
             "- `mean_latency_seconds`: Average wall-clock runtime for that baseline per example.",
@@ -1125,7 +1129,7 @@ class SpiderJoinEvaluation:
             "- `mean_join_count`: Average number of distinct join paths used by the evidence for that baseline.",
             "- `error_rate`: Fraction of examples where that baseline recorded an execution or API error.",
             "- `exact_match`: Whether one example's answer exactly matched the ground truth after lowercasing and trimming.",
-            "- `token_f1`: Ground-truth token recall for one example.",
+            "- `ground_truth_coverage`: Fraction of the ground truth contained in the answer for one example.",
             "- `faithfulness`: Fraction of valid evidence IDs cited or explicitly mentioned for one example.",
             "- `semantic_score`: Claude-judged semantic correctness for one example (0, 0.5, or 1).",
             "- `latency_seconds`: Runtime for one example.",
@@ -1233,7 +1237,7 @@ class SpiderJoinEvaluation:
                     "| Metric | Value |",
                     "| --- | --- |",
                     f"| `exact_match` | `{metrics['exact_match']}` |",
-                    f"| `token_f1` | `{metrics['token_f1']:.3f}` |",
+                    f"| `ground_truth_coverage` | `{metrics['ground_truth_coverage']:.3f}` |",
                     f"| `faithfulness` | `{metrics['faithfulness']:.3f}` |",
                     f"| `semantic_score` | `{metrics['semantic_score']:.1f}` |",
                     f"| `latency_seconds` | `{metrics['latency_seconds']}` |",

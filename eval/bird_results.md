@@ -8,7 +8,7 @@
 ## Metric Glossary
 
 - `exact_match_rate`: Fraction of examples where the answer text exactly matches the ground truth after lowercasing and trimming.
-- `mean_token_f1`: Average ground-truth token recall (fraction of ground truth tokens found in the answer).
+- `mean_ground_truth_coverage`: Average ground-truth token recall (fraction of ground truth tokens found in the answer).
 - `mean_faithfulness`: Average fraction of valid evidence IDs cited or mentioned in the answer.
 - `mean_semantic_score`: Average Claude-judged semantic correctness (0, 0.5, or 1).
 - `mean_latency_seconds`: Average wall-clock runtime for that baseline per example.
@@ -17,7 +17,7 @@
 - `mean_join_count`: Average number of distinct join paths used by the evidence for that baseline.
 - `error_rate`: Fraction of examples where that baseline recorded an execution or API error.
 - `exact_match`: Whether one example's answer exactly matched the ground truth after lowercasing and trimming.
-- `token_f1`: Ground-truth token recall for one example.
+- `ground_truth_coverage`: Ground-truth token recall for one example.
 - `faithfulness`: Fraction of valid evidence IDs cited or explicitly mentioned for one example.
 - `semantic_score`: Claude-judged semantic correctness for one example (0, 0.5, or 1).
 - `latency_seconds`: Runtime for one example.
@@ -36,7 +36,7 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0` |
+| `mean_ground_truth_coverage` | `0.0` |
 | `mean_faithfulness` | `0.0` |
 | `mean_semantic_score` | `0.0` |
 | `mean_latency_seconds` | `3.8424` |
@@ -51,7 +51,7 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0504` |
+| `mean_ground_truth_coverage` | `0.0504` |
 | `mean_faithfulness` | `0.0` |
 | `mean_semantic_score` | `0.0` |
 | `mean_latency_seconds` | `4.0896` |
@@ -66,7 +66,7 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0504` |
+| `mean_ground_truth_coverage` | `0.0504` |
 | `mean_faithfulness` | `0.0` |
 | `mean_semantic_score` | `0.0` |
 | `mean_latency_seconds` | `4.8912` |
@@ -81,7 +81,7 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0504` |
+| `mean_ground_truth_coverage` | `0.0504` |
 | `mean_faithfulness` | `0.0` |
 | `mean_semantic_score` | `0.0` |
 | `mean_latency_seconds` | `5.5682` |
@@ -96,7 +96,7 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.45` |
+| `mean_ground_truth_coverage` | `0.45` |
 | `mean_faithfulness` | `0.6` |
 | `mean_semantic_score` | `0.0` |
 | `mean_latency_seconds` | `11.8716` |
@@ -111,7 +111,7 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.2556` |
+| `mean_ground_truth_coverage` | `0.2556` |
 | `mean_faithfulness` | `1.0` |
 | `mean_semantic_score` | `0.4` |
 | `mean_latency_seconds` | `8.5476` |
@@ -170,7 +170,7 @@ If you're looking for this specific data, I'd recommend checking the California 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.573` |
@@ -215,7 +215,7 @@ The highest eligible free rate for K-12 students among these schools is **0.5491
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.274` |
@@ -270,7 +270,7 @@ The highest eligible free rate for K-12 students among these schools in Alameda 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.89` |
@@ -336,7 +336,7 @@ However, I should note that this is based only on the sample rows provided. Ther
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `6.993` |
@@ -381,7 +381,7 @@ To properly answer this question, I would need evidence that clearly identifies 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `17.599` |
@@ -436,7 +436,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `1.0` |
 | `latency_seconds` | `13.533` |
@@ -494,7 +494,7 @@ Could you please provide the relevant data or clarify what specific dataset you'
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `2.84` |
@@ -540,7 +540,7 @@ To answer the question about the lowest three eligible free rates for students a
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `3.145` |
@@ -599,7 +599,7 @@ Since there are no continuation schools in the provided data, I cannot answer th
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `5.311` |
@@ -664,7 +664,7 @@ The schema shows these tables have fields that might indicate school type, but w
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `6.876` |
@@ -709,7 +709,7 @@ These are listed from lowest to highest. However, I should note that the evidenc
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `9.333` |
@@ -767,7 +767,7 @@ The three lowest eligible free rates for students aged 5-17 in continuation scho
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `6.358` |
@@ -827,7 +827,7 @@ I apologize that I cannot provide the specific zip codes you're looking for, but
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.4` |
@@ -870,7 +870,7 @@ To answer this question, I would need:
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `3.683` |
@@ -921,7 +921,7 @@ To answer this question, I would need data rows that include schools from Fresno
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.903` |
@@ -981,7 +981,7 @@ The sample data shows charter schools from Alameda County Office of Education, b
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `3.367` |
@@ -1030,7 +1030,7 @@ To properly answer this question, I would need evidence that explicitly identifi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `7.886` |
@@ -1090,7 +1090,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `1.000` |
+| `ground_truth_coverage` | `1.000` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `0.5` |
 | `latency_seconds` | `4.567` |
@@ -1147,7 +1147,7 @@ Without this data, I cannot determine which school has the highest FRPM count or
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `3.274` |
@@ -1192,7 +1192,7 @@ While I can identify that FAME Public Charter has the highest FRPM count for K-1
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.250` |
+| `ground_truth_coverage` | `0.250` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.119` |
@@ -1254,7 +1254,7 @@ Therefore, the unabbreviated mailing street address of the school with the highe
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.250` |
+| `ground_truth_coverage` | `0.250` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `5.415` |
@@ -1322,7 +1322,7 @@ However, I should note that I can only answer based on the sample rows provided.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.250` |
+| `ground_truth_coverage` | `0.250` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.678` |
@@ -1367,7 +1367,7 @@ To answer the question about which school has the highest FRPM count for K-12 st
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.250` |
+| `ground_truth_coverage` | `0.250` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `7.735` |
@@ -1423,7 +1423,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.250` |
+| `ground_truth_coverage` | `0.250` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.322` |
@@ -1487,7 +1487,7 @@ If you have access to a specific dataset with this information, please share it 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `4.125` |
@@ -1542,7 +1542,7 @@ Note: FAME Public Charter also meets the criteria but does not have a phone numb
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.002` |
+| `ground_truth_coverage` | `0.002` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `5.227` |
@@ -1606,7 +1606,7 @@ Based on the available data, here are the phone numbers for direct charter-funde
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.002` |
+| `ground_truth_coverage` | `0.002` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `3.937` |
@@ -1685,7 +1685,7 @@ Note: This answer is based only on the sample rows provided. There may be additi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.002` |
+| `ground_truth_coverage` | `0.002` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `5.927` |
@@ -1749,7 +1749,7 @@ To answer the question about direct charter-funded schools opened after 2000/1/1
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.000` |
+| `ground_truth_coverage` | `0.000` |
 | `faithfulness` | `0.000` |
 | `semantic_score` | `0.0` |
 | `latency_seconds` | `16.805` |
@@ -1824,7 +1824,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.028` |
+| `ground_truth_coverage` | `0.028` |
 | `faithfulness` | `1.000` |
 | `semantic_score` | `0.5` |
 | `latency_seconds` | `13.958` |
