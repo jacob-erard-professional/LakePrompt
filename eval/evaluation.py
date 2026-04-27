@@ -72,36 +72,78 @@ def _parse_answer_payload(text: str) -> Any | None:
         return None
 
 
-def _f1_from_counters(pred_counter: Counter[str], gt_counter: Counter[str]) -> float:
+def _semantic_score(
+    prediction: str,
+    ground_truth: str,
+    question: str,
+    claude_client: "ClaudeClient",
+) -> float:
     """
-    Compute multiset F1 from token/atom counters.
+    Ask Claude to judge whether the prediction is semantically correct.
+
+    Returns 1.0 if the prediction conveys the same answer as the ground
+    truth, 0.5 if it is partially correct, and 0.0 if it is wrong or
+    refuses to answer. The judge is given the original question for context.
+
+    Args:
+        prediction: Model-generated answer string.
+        ground_truth: Reference answer string.
+        question: The original question being answered.
+        claude_client: Authenticated ClaudeClient instance.
+
+    Returns:
+        Score of 0.0, 0.5, or 1.0.
     """
-    pred_total = sum(pred_counter.values())
-    gt_total = sum(gt_counter.values())
-    if not pred_total or not gt_total:
+    if not prediction.strip() or not ground_truth.strip():
         return 0.0
-    common = sum((pred_counter & gt_counter).values())
-    if not common:
+
+    prompt = (
+        f"You are an answer-quality judge. Given a question, a ground-truth answer, "
+        f"and a predicted answer, decide whether the prediction is correct.\n\n"
+        f"Question: {question}\n\n"
+        f"Ground truth: {ground_truth}\n\n"
+        f"Prediction: {prediction}\n\n"
+        f"Rate the prediction:\n"
+        f"- 1 if it conveys the same answer as the ground truth (even if worded differently, "
+        f"formatted differently, or expressed as a percentage vs decimal)\n"
+        f"- 0.5 if it is partially correct (contains the right answer among others, or is "
+        f"missing some but not all correct values)\n"
+        f"- 0 if it is wrong, refuses to answer, or says the evidence is insufficient\n\n"
+        f"Respond with only the number: 0, 0.5, or 1"
+    )
+    try:
+        raw = claude_client.complete(
+            system="You are a precise answer-quality judge. Respond with only: 0, 0.5, or 1",
+            prompt=prompt,
+            max_tokens=5,
+            temperature=0.0,
+        )
+        value = float(raw.strip())
+        if value in (0.0, 0.5, 1.0):
+            return value
         return 0.0
-    precision = common / pred_total
-    recall = common / gt_total
-    return 2 * precision * recall / (precision + recall)
+    except Exception:  # noqa: BLE001
+        return 0.0
 
 
-def _token_f1(prediction: str, ground_truth: str) -> float:
+def _token_recall(prediction: str, ground_truth: str) -> float:
     """
-    Compute answer F1 between a predicted answer and ground truth.
+    Compute ground-truth token recall against the prediction.
 
-    For structured SQL-result ground truth, compare flattened primitive
-    values rather than raw JSON punctuation and keys. For plain text,
-    fall back to token overlap.
+    Measures what fraction of ground truth tokens appear in the prediction,
+    without penalising extra tokens in the response. This is a one-directional
+    metric: a verbose-but-correct answer scores the same as a terse correct
+    answer, whereas a missing key token is penalised.
+
+    For structured SQL-result ground truth, atoms are extracted from the
+    parsed JSON payload; for plain text, raw tokens are used.
 
     Args:
         prediction: Model-generated answer string.
         ground_truth: Reference answer string.
 
     Returns:
-        F1 score between 0.0 and 1.0.
+        Recall score between 0.0 and 1.0.
     """
     gt_payload = _parse_answer_payload(ground_truth)
     pred_payload = _parse_answer_payload(prediction)
@@ -113,9 +155,15 @@ def _token_f1(prediction: str, ground_truth: str) -> float:
             if pred_payload is not None
             else _tokenize(prediction)
         )
-        return _f1_from_counters(pred_counter, gt_counter)
+    else:
+        gt_counter = Counter(_tokenize(ground_truth))
+        pred_counter = Counter(_tokenize(prediction))
 
-    return _f1_from_counters(Counter(_tokenize(prediction)), Counter(_tokenize(ground_truth)))
+    gt_total = sum(gt_counter.values())
+    if not gt_total:
+        return 0.0
+    common = sum((pred_counter & gt_counter).values())
+    return common / gt_total
 
 
 def _exact_match(prediction: str, ground_truth: str) -> bool:
@@ -183,6 +231,7 @@ class ConditionResult:
     exact_match: bool = False
     token_f1: float = 0.0
     faithfulness: float = 0.0
+    semantic_score: float = 0.0
 
 
 @dataclass
@@ -403,9 +452,12 @@ class SpiderJoinEvaluation:
         evidence_ids = self._evidence_ids_from_condition(lp_result)
         for cond in example.conditions:
             cond.exact_match = _exact_match(cond.answer, example.ground_truth)
-            cond.token_f1 = _token_f1(cond.answer, example.ground_truth)
+            cond.token_f1 = _token_recall(cond.answer, example.ground_truth)
             cond.faithfulness = _faithfulness_score(
                 cond.answer, cond.cited_ids, evidence_ids
+            )
+            cond.semantic_score = _semantic_score(
+                cond.answer, example.ground_truth, question, self.claude
             )
 
         return example
@@ -945,6 +997,7 @@ class SpiderJoinEvaluation:
                 "exact_match": condition.exact_match,
                 "token_f1": condition.token_f1,
                 "faithfulness": condition.faithfulness,
+                "semantic_score": condition.semantic_score,
                 "latency_seconds": condition.latency_seconds,
                 "evidence_count": condition.evidence_count,
                 "join_count": condition.join_count,
@@ -997,6 +1050,7 @@ class SpiderJoinEvaluation:
                 "exact_match_rate": round(sum(c.exact_match for c in cond_results) / n, 4) if n else 0,
                 "mean_token_f1": round(sum(c.token_f1 for c in cond_results) / n, 4) if n else 0,
                 "mean_faithfulness": round(sum(c.faithfulness for c in cond_results) / n, 4) if n else 0,
+                "mean_semantic_score": round(sum(c.semantic_score for c in cond_results) / n, 4) if n else 0,
                 "mean_latency_seconds": round(sum(c.latency_seconds for c in cond_results) / n, 4) if n else 0,
                 "mean_context_tokens": round(sum(c.context_tokens for c in cond_results) / n, 1) if n else 0,
                 "mean_prompt_tokens": round(sum(c.prompt_tokens for c in cond_results) / n, 1) if n else 0,
@@ -1057,16 +1111,18 @@ class SpiderJoinEvaluation:
             "## Metric Glossary",
             "",
             "- `exact_match_rate`: Fraction of examples where the answer text exactly matches the ground truth after lowercasing and trimming.",
-            "- `mean_token_f1`: Average token-overlap F1 between the answer text and ground truth.",
+            "- `mean_token_f1`: Average ground-truth token recall (fraction of ground truth tokens found in the answer).",
             "- `mean_faithfulness`: Average fraction of valid evidence IDs cited or mentioned in the answer.",
+            "- `mean_semantic_score`: Average Claude-judged semantic correctness (0, 0.5, or 1).",
             "- `mean_latency_seconds`: Average wall-clock runtime for that baseline per example.",
             "- `mean_context_tokens`: Average whitespace-token count of the evidence/context portion only.",
             "- `mean_prompt_tokens`: Average whitespace-token count of the full prompt sent to Claude.",
             "- `mean_join_count`: Average number of distinct join paths used by the evidence for that baseline.",
             "- `error_rate`: Fraction of examples where that baseline recorded an execution or API error.",
             "- `exact_match`: Whether one example's answer exactly matched the ground truth after lowercasing and trimming.",
-            "- `token_f1`: Token-overlap F1 for one example.",
+            "- `token_f1`: Ground-truth token recall for one example.",
             "- `faithfulness`: Fraction of valid evidence IDs cited or explicitly mentioned for one example.",
+            "- `semantic_score`: Claude-judged semantic correctness for one example (0, 0.5, or 1).",
             "- `latency_seconds`: Runtime for one example.",
             "- `evidence_count`: Number of evidence rows returned for one example.",
             "- `join_count`: Number of distinct join paths represented in those evidence rows.",
@@ -1165,6 +1221,7 @@ class SpiderJoinEvaluation:
                     f"| `exact_match` | `{metrics['exact_match']}` |",
                     f"| `token_f1` | `{metrics['token_f1']:.3f}` |",
                     f"| `faithfulness` | `{metrics['faithfulness']:.3f}` |",
+                    f"| `semantic_score` | `{metrics['semantic_score']:.1f}` |",
                     f"| `latency_seconds` | `{metrics['latency_seconds']}` |",
                     f"| `evidence_count` | `{metrics['evidence_count']}` |",
                     f"| `join_count` | `{metrics['join_count']}` |",

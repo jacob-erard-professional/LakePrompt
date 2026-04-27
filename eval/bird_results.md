@@ -1,23 +1,25 @@
 # LakePrompt Evaluation Report
 
 ## Run Metadata
-- Generated at: `2026-04-26T04:43:42.189951+00:00`
+- Generated at: `2026-04-27T01:21:38.218737+00:00`
 - Dataset root: `data`
 - Metadata CSV: `.`
 - Claude model: `claude-sonnet-4-20250514`
 ## Metric Glossary
 
 - `exact_match_rate`: Fraction of examples where the answer text exactly matches the ground truth after lowercasing and trimming.
-- `mean_token_f1`: Average token-overlap F1 between the answer text and ground truth.
+- `mean_token_f1`: Average ground-truth token recall (fraction of ground truth tokens found in the answer).
 - `mean_faithfulness`: Average fraction of valid evidence IDs cited or mentioned in the answer.
+- `mean_semantic_score`: Average Claude-judged semantic correctness (0, 0.5, or 1).
 - `mean_latency_seconds`: Average wall-clock runtime for that baseline per example.
 - `mean_context_tokens`: Average whitespace-token count of the evidence/context portion only.
 - `mean_prompt_tokens`: Average whitespace-token count of the full prompt sent to Claude.
 - `mean_join_count`: Average number of distinct join paths used by the evidence for that baseline.
 - `error_rate`: Fraction of examples where that baseline recorded an execution or API error.
 - `exact_match`: Whether one example's answer exactly matched the ground truth after lowercasing and trimming.
-- `token_f1`: Token-overlap F1 for one example.
+- `token_f1`: Ground-truth token recall for one example.
 - `faithfulness`: Fraction of valid evidence IDs cited or explicitly mentioned for one example.
+- `semantic_score`: Claude-judged semantic correctness for one example (0, 0.5, or 1).
 - `latency_seconds`: Runtime for one example.
 - `evidence_count`: Number of evidence rows returned for one example.
 - `join_count`: Number of distinct join paths represented in those evidence rows.
@@ -36,7 +38,8 @@
 | `exact_match_rate` | `0.0` |
 | `mean_token_f1` | `0.0` |
 | `mean_faithfulness` | `0.0` |
-| `mean_latency_seconds` | `3.239` |
+| `mean_semantic_score` | `0.0` |
+| `mean_latency_seconds` | `3.8424` |
 | `mean_context_tokens` | `0.0` |
 | `mean_prompt_tokens` | `25.0` |
 | `mean_join_count` | `0.0` |
@@ -48,9 +51,10 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0072` |
+| `mean_token_f1` | `0.0504` |
 | `mean_faithfulness` | `0.0` |
-| `mean_latency_seconds` | `4.1206` |
+| `mean_semantic_score` | `0.0` |
+| `mean_latency_seconds` | `4.0896` |
 | `mean_context_tokens` | `392.4` |
 | `mean_prompt_tokens` | `423.4` |
 | `mean_join_count` | `0.0` |
@@ -62,9 +66,10 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0041` |
+| `mean_token_f1` | `0.0504` |
 | `mean_faithfulness` | `0.0` |
-| `mean_latency_seconds` | `3.8278` |
+| `mean_semantic_score` | `0.0` |
+| `mean_latency_seconds` | `4.8912` |
 | `mean_context_tokens` | `858.0` |
 | `mean_prompt_tokens` | `892.0` |
 | `mean_join_count` | `0.0` |
@@ -76,9 +81,10 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0037` |
+| `mean_token_f1` | `0.0504` |
 | `mean_faithfulness` | `0.0` |
-| `mean_latency_seconds` | `5.3092` |
+| `mean_semantic_score` | `0.0` |
+| `mean_latency_seconds` | `5.5682` |
 | `mean_context_tokens` | `1015.0` |
 | `mean_prompt_tokens` | `1055.0` |
 | `mean_join_count` | `0.0` |
@@ -90,12 +96,13 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.0301` |
-| `mean_faithfulness` | `0.4` |
-| `mean_latency_seconds` | `13.6282` |
-| `mean_context_tokens` | `22.0` |
-| `mean_prompt_tokens` | `58.6` |
-| `mean_join_count` | `0.8` |
+| `mean_token_f1` | `0.45` |
+| `mean_faithfulness` | `0.6` |
+| `mean_semantic_score` | `0.0` |
+| `mean_latency_seconds` | `11.8716` |
+| `mean_context_tokens` | `26.8` |
+| `mean_prompt_tokens` | `62.8` |
+| `mean_join_count` | `1.0` |
 | `error_rate` | `0.0` |
 
 ### lakeprompt_ranked
@@ -104,12 +111,13 @@
 | --- | --- |
 | `n` | `5` |
 | `exact_match_rate` | `0.0` |
-| `mean_token_f1` | `0.1481` |
-| `mean_faithfulness` | `0.8` |
-| `mean_latency_seconds` | `10.5028` |
-| `mean_context_tokens` | `22.0` |
-| `mean_prompt_tokens` | `58.6` |
-| `mean_join_count` | `0.8` |
+| `mean_token_f1` | `0.2556` |
+| `mean_faithfulness` | `1.0` |
+| `mean_semantic_score` | `0.4` |
+| `mean_latency_seconds` | `8.5476` |
+| `mean_context_tokens` | `26.8` |
+| `mean_prompt_tokens` | `62.8` |
+| `mean_join_count` | `1.0` |
 | `error_rate` | `0.0` |
 
 ## Examples
@@ -148,12 +156,13 @@ What is the highest eligible free rate for K-12 students in the schools in Alame
 ```text
 I don't have access to current data about free lunch eligibility rates for K-12 students in Alameda County schools. To get this information, you would need to check with:
 
-1. The Alameda County Office of Education
-2. Individual school districts within Alameda County
-3. The California Department of Education's data reporting system
-4. Federal databases that track free and reduced-price meal program participation
+1. **Alameda County Office of Education** - They would have county-wide statistics
+2. **California Department of Education** - They maintain school-level data on free and reduced-price meal eligibility
+3. **Individual school districts** in Alameda County - Each district reports this data annually
 
-These sources would have the most up-to-date information about eligibility rates for free meal programs in specific schools and districts within Alameda County.
+The free lunch eligibility rate (often called "socioeconomically disadvantaged" percentage) is typically reported as part of school accountability data and can vary significantly between schools and districts within the county.
+
+If you're looking for this specific data, I'd recommend checking the California School Dashboard or contacting the Alameda County Office of Education directly.
 ```
 
 **Scoring Metrics**
@@ -163,7 +172,8 @@ These sources would have the most up-to-date information about eligibility rates
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `2.846` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.573` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `0` |
@@ -191,15 +201,13 @@ What is the highest eligible free rate for K-12 students in the schools in Alame
 **Response**
 
 ```text
-Looking at the data provided for the three schools in Alameda County, I need to compare the "Percent (%) Eligible Free (K-12)" values:
+Looking at the provided data for schools in Alameda County, I need to examine the "Percent (%) Eligible Free (K-12)" column for each school:
 
 1. FAME Public Charter: 0.519779208831647 (51.98%)
 2. Envision Academy for Arts & Technology: 0.470886075949367 (47.09%)
 3. Aspire California College Preparatory Academy: 0.549180327868853 (54.92%)
 
-The highest eligible free rate for K-12 students among these schools is **0.549180327868853 (54.92%)** at Aspire California College Preparatory Academy.
-
-Note: This answer is based only on the three schools provided in the data. There may be other schools in Alameda County not included in these rows.
+The highest eligible free rate for K-12 students among these schools is **0.549180327868853** (approximately 54.92%), which belongs to Aspire California College Preparatory Academy.
 ```
 
 **Scoring Metrics**
@@ -209,7 +217,8 @@ Note: This answer is based only on the three schools provided in the data. There
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `3.682` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.274` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `397` |
@@ -263,7 +272,8 @@ The highest eligible free rate for K-12 students among these schools in Alameda 
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `4.207` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.89` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `858` |
@@ -308,7 +318,7 @@ What is the highest eligible free rate for K-12 students in the schools in Alame
 **Response**
 
 ```text
-Looking at the data provided, I can see information about eligible free rates for K-12 students in the frpm table, specifically in the "Percent (%) Eligible Free (K-12)" column.
+Looking at the data provided, I can see information about eligible free rates for K-12 students in the `frpm` table, specifically in the "Percent (%) Eligible Free (K-12)" column.
 
 From the sample rows shown, all three schools are in Alameda County, and their eligible free rates for K-12 students are:
 
@@ -318,7 +328,7 @@ From the sample rows shown, all three schools are in Alameda County, and their e
 
 Based on these sample rows, the highest eligible free rate for K-12 students among the schools shown is **0.549180327868853 (approximately 54.9%)** at Aspire California College Preparatory Academy.
 
-However, I should note that this is based only on the sample rows provided. There may be other schools in Alameda County in the full dataset that could have higher rates. To get the definitive highest rate for all schools in Alameda County, I would need to see the complete dataset or a query result that includes all Alameda County schools.
+However, I should note that this is based only on the sample rows provided. There may be other schools in Alameda County in the full dataset that could have higher rates. To get the definitive answer for all schools in Alameda County, I would need to see the complete dataset or additional sample rows.
 ```
 
 **Scoring Metrics**
@@ -328,7 +338,8 @@ However, I should note that this is based only on the sample rows provided. Ther
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `6.912` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `6.993` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `1015` |
@@ -360,7 +371,7 @@ The evidence is insufficient because:
 1. The single evidence row (E1) shows a maximum percentage of 1.0% (or 100% if interpreted as a decimal), but it lacks crucial context
 2. There is no indication that this data specifically relates to Alameda County
 3. There is no geographic identifier or school district information in the evidence
-4. A single data point cannot establish what the "highest" rate is across multiple schools in a county
+4. A single data point cannot establish the "highest" rate across multiple schools in a county
 
 To properly answer this question, I would need evidence that clearly identifies schools in Alameda County and their respective eligible free rates for K-12 students.
 ```
@@ -370,9 +381,10 @@ To properly answer this question, I would need evidence that clearly identifies 
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.016` |
+| `token_f1` | `1.000` |
 | `faithfulness` | `1.000` |
-| `latency_seconds` | `29.59` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `17.599` |
 | `evidence_count` | `1` |
 | `join_count` | `1` |
 | `context_tokens` | `7` |
@@ -426,7 +438,8 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `1.000` |
-| `latency_seconds` | `25.462` |
+| `semantic_score` | `1.0` |
+| `latency_seconds` | `13.533` |
 | `evidence_count` | `1` |
 | `join_count` | `1` |
 | `context_tokens` | `7` |
@@ -446,6 +459,12 @@ rules[2]: "Be concise.","Return only the requested JSON."
 SELECT `Free Meal Count (Ages 5-17)` / `Enrollment (Ages 5-17)` FROM frpm WHERE `Educational Option Type` = 'Continuation School' AND `Free Meal Count (Ages 5-17)` / `Enrollment (Ages 5-17)` IS NOT NULL ORDER BY `Free Meal Count (Ages 5-17)` / `Enrollment (Ages 5-17)` ASC LIMIT 3
 ```
 
+**LakePrompt Generated Query**
+
+```sql
+SELECT "frpm__Percent (%) Eligible Free (Ages 5-17)" AS "Percent (%) Eligible Free (Ages 5-17)" FROM ( SELECT "frpm"."CDSCode" AS "frpm__CDSCode", "frpm"."Academic Year" AS "frpm__Academic Year", "frpm"."County Code" AS "frpm__County Code", "frpm"."District Code" AS "frpm__District Code", "frpm"."School Code" AS "frpm__School Code", "frpm"."County Name" AS "frpm__County Name", "frpm"."District Name" AS "frpm__District Name", "frpm"."School Name" AS "frpm__School Name", "frpm"."District Type" AS "frpm__District Type", "frpm"."School Type" AS "frpm__School Type", "frpm"."Educational Option Type" AS "frpm__Educational Option Type", "frpm"."NSLP Provision Status" AS "frpm__NSLP Provision Status", "frpm"."Charter School (Y/N)" AS "frpm__Charter School (Y/N)", "frpm"."Charter School Number" AS "frpm__Charter School Number", "frpm"."Charter Funding Type" AS "frpm__Charter Funding Type", "frpm"."IRC" AS "frpm__IRC", "frpm"."Low Grade" AS "frpm__Low Grade", "frpm"."High Grade" AS "frpm__High Grade", "frpm"."Enrollment (K-12)" AS "frpm__Enrollment (K-12)", "frpm"."Free Meal Count (K-12)" AS "frpm__Free Meal Count (K-12)", "frpm"."Percent (%) Eligible Free (K-12)" AS "frpm__Percent (%) Eligible Free (K-12)", "frpm"."FRPM Count (K-12)" AS "frpm__FRPM Count (K-12)", "frpm"."Percent (%) Eligible FRPM (K-12)" AS "frpm__Percent (%) Eligible FRPM (K-12)", "frpm"."Enrollment (Ages 5-17)" AS "frpm__Enrollment (Ages 5-17)", "frpm"."Free Meal Count (Ages 5-17)" AS "frpm__Free Meal Count (Ages 5-17)", "frpm"."Percent (%) Eligible Free (Ages 5-17)" AS "frpm__Percent (%) Eligible Free (Ages 5-17)", "frpm"."FRPM Count (Ages 5-17)" AS "frpm__FRPM Count (Ages 5-17)", "frpm"."Percent (%) Eligible FRPM (Ages 5-17)" AS "frpm__Percent (%) Eligible FRPM (Ages 5-17)", "frpm"."2013-14 CALPADS Fall 1 Certification Status" AS "frpm__2013-14 CALPADS Fall 1 Certification Status", "schools"."CDSCode" AS "schools__CDSCode", "schools"."NCESDist" AS "schools__NCESDist", "schools"."NCESSchool" AS "schools__NCESSchool", "schools"."StatusType" AS "schools__StatusType", "schools"."County" AS "schools__County", "schools"."District" AS "schools__District", "schools"."School" AS "schools__School", "schools"."Street" AS "schools__Street", "schools"."StreetAbr" AS "schools__StreetAbr", "schools"."City" AS "schools__City", "schools"."Zip" AS "schools__Zip", "schools"."State" AS "schools__State", "schools"."MailStreet" AS "schools__MailStreet", "schools"."MailStrAbr" AS "schools__MailStrAbr", "schools"."MailCity" AS "schools__MailCity", "schools"."MailZip" AS "schools__MailZip", "schools"."MailState" AS "schools__MailState", "schools"."Phone" AS "schools__Phone", "schools"."Ext" AS "schools__Ext", "schools"."Website" AS "schools__Website", "schools"."OpenDate" AS "schools__OpenDate", "schools"."ClosedDate" AS "schools__ClosedDate", "schools"."Charter" AS "schools__Charter", "schools"."CharterNum" AS "schools__CharterNum", "schools"."FundingType" AS "schools__FundingType", "schools"."DOC" AS "schools__DOC", "schools"."DOCType" AS "schools__DOCType", "schools"."SOC" AS "schools__SOC", "schools"."SOCType" AS "schools__SOCType", "schools"."EdOpsCode" AS "schools__EdOpsCode", "schools"."EdOpsName" AS "schools__EdOpsName", "schools"."EILCode" AS "schools__EILCode", "schools"."EILName" AS "schools__EILName", "schools"."GSoffered" AS "schools__GSoffered", "schools"."GSserved" AS "schools__GSserved", "schools"."Virtual" AS "schools__Virtual", "schools"."Magnet" AS "schools__Magnet", "schools"."Latitude" AS "schools__Latitude", "schools"."Longitude" AS "schools__Longitude", "schools"."AdmFName1" AS "schools__AdmFName1", "schools"."AdmLName1" AS "schools__AdmLName1", "schools"."AdmEmail1" AS "schools__AdmEmail1", "schools"."AdmFName2" AS "schools__AdmFName2", "schools"."AdmLName2" AS "schools__AdmLName2", "schools"."AdmEmail2" AS "schools__AdmEmail2", "schools"."AdmFName3" AS "schools__AdmFName3", "schools"."AdmLName3" AS "schools__AdmLName3", "schools"."AdmEmail3" AS "schools__AdmEmail3", "schools"."LastUpdate" AS "schools__LastUpdate" FROM "frpm" JOIN "schools" ON "frpm"."CDSCode" = "schools"."CDSCode" ) AS "__lakeprompt_base" WHERE "schools__EILName" = 'High School' ORDER BY "Percent (%) Eligible Free (Ages 5-17)" ASC LIMIT 3
+```
+
 ### no_context
 
 **Prompt**
@@ -460,9 +479,14 @@ Please list the lowest three eligible free rates for students aged 5-17 in conti
 **Response**
 
 ```text
-I don't have access to any data about free rates for students aged 5-17 in continuation schools. To answer your question about the lowest three eligible free rates, I would need access to a dataset or document that contains this specific information about continuation school rates and student eligibility criteria.
+I don't have access to any data about free rates for students aged 5-17 in continuation schools. To answer this question, I would need specific information about:
 
-If you have this data available, please share it and I'll be happy to help identify the lowest three rates for the specified age group.
+- What "eligible free rates" refers to (free lunch rates, enrollment rates, etc.)
+- The specific continuation schools or school district being referenced
+- The time period for this data
+- The source of the rate information
+
+Could you please provide the relevant data or clarify what specific dataset you'd like me to analyze?
 ```
 
 **Scoring Metrics**
@@ -472,7 +496,8 @@ If you have this data available, please share it and I'll be happy to help ident
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `2.479` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `2.84` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `0` |
@@ -500,15 +525,14 @@ Please list the lowest three eligible free rates for students aged 5-17 in conti
 **Response**
 
 ```text
-Based on the provided rows, I cannot answer this question about the lowest three eligible free rates for students aged 5-17 in continuation schools.
+I cannot answer this question using only the provided rows. The question asks specifically about continuation schools, but none of the three schools in the provided data are continuation schools. 
 
-The data provided contains information for 3 schools, but none of them are continuation schools. The schools shown are:
-
+The schools in the data are:
 1. FAME Public Charter - K-12 Schools (Public)
-2. Envision Academy for Arts & Technology - High Schools (Public) 
+2. Envision Academy for Arts & Technology - High Schools (Public)  
 3. Aspire California College Preparatory Academy - High Schools (Public)
 
-To answer your question, I would need data that includes schools with "School Type" listed as continuation schools, which is not present in these rows.
+To answer the question about the lowest three eligible free rates for students aged 5-17 in continuation schools, I would need data rows that include schools with "School Type" indicating they are continuation schools.
 ```
 
 **Scoring Metrics**
@@ -518,7 +542,8 @@ To answer your question, I would need data that includes schools with "School Ty
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `3.516` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `3.145` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `397` |
@@ -556,16 +581,17 @@ Please list the lowest three eligible free rates for students aged 5-17 in conti
 **Response**
 
 ```text
-Looking at the provided data, I need to identify continuation schools and their eligible free rates for students aged 5-17.
+I need to look for continuation schools in the provided data and find their eligible free rates for students aged 5-17.
 
-From the schools table, I can see the school types in the "SOCType" field:
+Looking at the data provided, I can see information from the frpm table that includes "Percent (%) Eligible Free (Ages 5-17)" for different schools. However, I need to identify which schools are continuation schools.
+
+From the schools table, I can see the "SOCType" field which indicates the school type:
 - FAME Public Charter: "K-12 Schools (Public)"
 - Envision Academy for Arts & Technology: "High Schools (Public)"
-- Alameda County Office of Education: "County Office of Education (COE)"
 
-None of these schools are identified as continuation schools in the provided data. Continuation schools would typically have a specific designation or school type indicating they are continuation schools, but I don't see any such designation in the available rows.
+None of the schools in the provided data are identified as continuation schools. The SOCType values shown are "K-12 Schools (Public)" and "High Schools (Public)", but there are no schools with a continuation school designation in the provided rows.
 
-Based on the provided data, I cannot identify any continuation schools, so I cannot provide the requested list of the lowest three eligible free rates for students aged 5-17 in continuation schools. The data is insufficient to answer this question as it does not contain any schools specifically identified as continuation schools.
+Since there are no continuation schools in the provided data, I cannot answer the question about the lowest three eligible free rates for students aged 5-17 in continuation schools. The data is insufficient to provide this information.
 ```
 
 **Scoring Metrics**
@@ -575,7 +601,8 @@ Based on the provided data, I cannot identify any continuation schools, so I can
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `4.434` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `5.311` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `858` |
@@ -622,11 +649,14 @@ Please list the lowest three eligible free rates for students aged 5-17 in conti
 ```text
 I cannot answer this question confidently from the provided information. 
 
-While I can see that the frpm table contains the "Percent (%) Eligible Free (Ages 5-17)" column which would provide the free rates for students aged 5-17, I cannot identify continuation schools from the available data.
+While I can see that the frpm table contains the data I would need (specifically the "Percent (%) Eligible Free (Ages 5-17)" column), I cannot identify which schools are continuation schools from the available schema and sample data.
 
-The sample rows shown are all from regular charter schools (K-12 and high schools), and none appear to be continuation schools. The schema shows various school type and educational option fields, but the sample data doesn't include any continuation schools to demonstrate how they would be identified in the database.
+The sample rows provided are all from regular charter schools (K-12 and high schools), and none appear to be continuation schools. To answer this question, I would need either:
 
-To answer this question, I would need to see sample data that includes continuation schools or more information about how continuation schools are classified in the school type or educational option type fields.
+1. Sample data that includes continuation schools, or
+2. Information about how continuation schools are identified in the database (such as a specific code in the School Type, Educational Option Type, or SOCType fields)
+
+The schema shows these tables have fields that might indicate school type, but without seeing examples of continuation schools or knowing the specific codes/values used to identify them, I cannot reliably filter for continuation schools to find their free meal eligibility rates.
 ```
 
 **Scoring Metrics**
@@ -636,7 +666,8 @@ To answer this question, I would need to see sample data that includes continuat
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `5.556` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `6.876` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `1015` |
@@ -653,7 +684,9 @@ Use only the following LakePrompt evidence rows to answer the question.
 If the evidence is insufficient, say so.
 
 Evidence:
-[no evidence returned]
+E2: {"Percent (%) Eligible Free (Ages 5-17)": 0.00707338638373121}
+E3: {"Percent (%) Eligible Free (Ages 5-17)": 0.00535019455252918}
+E1: {"Percent (%) Eligible Free (Ages 5-17)": 0.0066577896138482}
 
 Question:
 Please list the lowest three eligible free rates for students aged 5-17 in continuation schools.
@@ -662,7 +695,13 @@ Please list the lowest three eligible free rates for students aged 5-17 in conti
 **Response**
 
 ```text
-I cannot answer this question because no evidence was provided. The evidence section shows "[no evidence returned]", which means there is insufficient information available to determine the lowest three eligible free rates for students aged 5-17 in continuation schools.
+Based on the provided evidence rows, the three eligible free rates for students aged 5-17 are:
+
+1. **0.535%** (E3: 0.00535019455252918)
+2. **0.666%** (E1: 0.0066577896138482)
+3. **0.707%** (E2: 0.00707338638373121)
+
+These are listed from lowest to highest. However, I should note that the evidence is insufficient to confirm these are specifically from "continuation schools" as the evidence rows don't include school type information.
 ```
 
 **Scoring Metrics**
@@ -671,13 +710,14 @@ I cannot answer this question because no evidence was provided. The evidence sec
 | --- | --- |
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
-| `faithfulness` | `0.000` |
-| `latency_seconds` | `5.552` |
-| `evidence_count` | `0` |
-| `join_count` | `0` |
-| `context_tokens` | `0` |
-| `prompt_tokens` | `38` |
-| `cited_ids` | `[none]` |
+| `faithfulness` | `1.000` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `9.333` |
+| `evidence_count` | `3` |
+| `join_count` | `1` |
+| `context_tokens` | `24` |
+| `prompt_tokens` | `59` |
+| `cited_ids` | `E2, E3, E1` |
 | `error` | `[none]` |
 
 ### lakeprompt_ranked
@@ -690,8 +730,28 @@ The following context is encoded as TOON (Token-Oriented Object Notation). Use i
 task: "Answer the question using only the evidence rows. Use sources and schemas only as metadata. Cite the supporting evidence row IDs."
 context:
   question: "Please list the lowest three eligible free rates for students aged 5-17 in continuation schools."
-  sources[0]:
-  evidence_groups[0]:
+  sources[1]:
+    [0]:
+      id: S1
+      path_id: P1
+      tables[2]: frpm,schools
+      join_keys[1]:
+        [0]: ["frpm","CDSCode","schools","CDSCode"]
+      path_score: 0.8005
+      sql: "SELECT \"frpm__Percent (%) Eligible Free (Ages 5-17)\" AS \"Percent (%) Eligible Free (Ages 5-17)\" FROM ( SELECT \"frpm\".\"CDSCode\" AS \"frpm__CDSCode\", \"frpm\".\"Academic Year\" AS \"frpm__Academic Year\", \"frpm\".\"County Code\" AS \"frpm__County Code\", \"frpm\".\"District Code\" AS \"frpm__District Code\", \"frpm\".\"School Code\" AS \"frpm__School Code\", \"frpm\".\"County Name\" AS \"frpm__County Name\", \"frpm\".\"District Name\" AS \"frpm__District Name\", \"frpm\".\"School Name\" AS \"frpm__School Name\", \"frpm\".\"District Type\" AS \"frpm__District Type\", \"frpm\".\"School Type\" AS \"frpm__School Type\", \"frpm\".\"Educational Option Type\" AS \"frpm__Educational Option Type\", \"frpm\".\"NSLP Provision Status\" AS \"frpm__NSLP Provision Status\", \"frpm\".\"Charter School (Y/N)\" AS \"frpm__Charter School (Y/N)\", \"frpm\".\"Charter School Number\" AS \"frpm__Charter School Number\", \"frpm\".\"Charter Funding Type\" AS \"frpm__Charter Funding Type\", \"frpm\".\"IRC\" AS \"frpm__IRC\", \"frpm\".\"Low Grade\" AS \"frpm__Low Grade\", \"frpm\".\"High Grade\" AS \"frpm__High Grade\", \"frpm\".\"Enrollment (K-12)\" AS \"frpm__Enrollment (K-12)\", \"frpm\".\"Free Meal Count (K-12)\" AS \"frpm__Free Meal Count (K-12)\", \"frpm\".\"Percent (%) Eligible Free (K-12)\" AS \"frpm__Percent (%) Eligible Free (K-12)\", \"frpm\".\"FRPM Count (K-12)\" AS \"frpm__FRPM Count (K-12)\", \"frpm\".\"Percent (%) Eligible FRPM (K-12)\" AS \"frpm__Percent (%) Eligible FRPM (K-12)\", \"frpm\".\"Enrollment (Ages 5-17)\" AS \"frpm__Enrollment (Ages 5-17)\", \"frpm\".\"Free Meal Count (Ages 5-17)\" AS \"frpm__Free Meal Count (Ages 5-17)\", \"frpm\".\"Percent (%) Eligible Free (Ages 5-17)\" AS \"frpm__Percent (%) Eligible Free (Ages 5-17)\", \"frpm\".\"FRPM Count (Ages 5-17)\" AS \"frpm__FRPM Count (Ages 5-17)\", \"frpm\".\"Percent (%) Eligible FRPM (Ages 5-17)\" AS \"frpm__Percent (%) Eligible FRPM (Ages 5-17)\", \"frpm\".\"2013-14 CALPADS Fall 1 Certification Status\" AS \"frpm__2013-14 CALPADS Fall 1 Certification Status\", \"schools\".\"CDSCode\" AS \"schools__CDSCode\", \"schools\".\"NCESDist\" AS \"schools__NCESDist\", \"schools\".\"NCESSchool\" AS \"schools__NCESSchool\", \"schools\".\"StatusType\" AS \"schools__StatusType\", \"schools\".\"County\" AS \"schools__County\", \"schools\".\"District\" AS \"schools__District\", \"schools\".\"School\" AS \"schools__School\", \"schools\".\"Street\" AS \"schools__Street\", \"schools\".\"StreetAbr\" AS \"schools__StreetAbr\", \"schools\".\"City\" AS \"schools__City\", \"schools\".\"Zip\" AS \"schools__Zip\", \"schools\".\"State\" AS \"schools__State\", \"schools\".\"MailStreet\" AS \"schools__MailStreet\", \"schools\".\"MailStrAbr\" AS \"schools__MailStrAbr\", \"schools\".\"MailCity\" AS \"schools__MailCity\", \"schools\".\"MailZip\" AS \"schools__MailZip\", \"schools\".\"MailState\" AS \"schools__MailState\", \"schools\".\"Phone\" AS \"schools__Phone\", \"schools\".\"Ext\" AS \"schools__Ext\", \"schools\".\"Website\" AS \"schools__Website\", \"schools\".\"OpenDate\" AS \"schools__OpenDate\", \"schools\".\"ClosedDate\" AS \"schools__ClosedDate\", \"schools\".\"Charter\" AS \"schools__Charter\", \"schools\".\"CharterNum\" AS \"schools__CharterNum\", \"schools\".\"FundingType\" AS \"schools__FundingType\", \"schools\".\"DOC\" AS \"schools__DOC\", \"schools\".\"DOCType\" AS \"schools__DOCType\", \"schools\".\"SOC\" AS \"schools__SOC\", \"schools\".\"SOCType\" AS \"schools__SOCType\", \"schools\".\"EdOpsCode\" AS \"schools__EdOpsCode\", \"schools\".\"EdOpsName\" AS \"schools__EdOpsName\", \"schools\".\"EILCode\" AS \"schools__EILCode\", \"schools\".\"EILName\" AS \"schools__EILName\", \"schools\".\"GSoffered\" AS \"schools__GSoffered\", \"schools\".\"GSserved\" AS \"schools__GSserved\", \"schools\".\"Virtual\" AS \"schools__Virtual\", \"schools\".\"Magnet\" AS \"schools__Magnet\", \"schools\".\"Latitude\" AS \"schools__Latitude\", \"schools\".\"Longitude\" AS \"schools__Longitude\", \"schools\".\"AdmFName1\" AS \"schools__AdmFName1\", \"schools\".\"AdmLName1\" AS \"schools__AdmLName1\", \"schools\".\"AdmEmail1\" AS \"schools__AdmEmail1\", \"schools\".\"AdmFName2\" AS \"schools__AdmFName2\", \"schools\".\"AdmLName2\" AS \"schools__AdmLName2\", \"schools\".\"AdmEmail2\" AS \"schools__AdmEmail2\", \"schools\".\"AdmFName3\" AS \"schools__AdmFName3\", \"schools\".\"AdmLName3\" AS \"schools__AdmLName3\", \"schools\".\"AdmEmail3\" AS \"schools__AdmEmail3\", \"schools\".\"LastUpdate\" AS \"schools__LastUpdate\" FROM \"frpm\" JOIN \"schools\" ON \"frpm\".\"CDSCode\" = \"schools\".\"CDSCode\" ) AS \"__lakeprompt_base\" WHERE \"schools__EILName\" = 'High School' ORDER BY \"Percent (%) Eligible Free (Ages 5-17)\" ASC LIMIT 3"
+  evidence_groups[1]:
+    [0]:
+      source: S1
+      schema: C1
+      rows[3]{id,Percent (%) Eligible Free (Ages 5-17)}:
+        E1,0.0066577896138482
+        E2,0.00707338638373121
+        E3,0.00535019455252918
+  schemas[1]:
+    [0]:
+      id: C1
+      field_map:
+        Percent (%) Eligible Free (Ages 5-17): "Percent (%) Eligible Free (Ages 5-17)"
 output_format: "{\"answer\":\"Plain-text answer here\",\"cited_ids\":[\"id1\",\"id2\"]}"
 rules[2]: "Be concise.","Return only the requested JSON."
 ```
@@ -699,7 +759,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 **Response**
 
 ```text
-Could not find evidence in the data lake
+The three lowest eligible free rates for students aged 5-17 in continuation schools are: 0.535%, 0.666%, and 0.707%.
 ```
 
 **Scoring Metrics**
@@ -708,13 +768,14 @@ Could not find evidence in the data lake
 | --- | --- |
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
-| `faithfulness` | `0.000` |
-| `latency_seconds` | `3.999` |
-| `evidence_count` | `0` |
-| `join_count` | `0` |
-| `context_tokens` | `0` |
-| `prompt_tokens` | `38` |
-| `cited_ids` | `[none]` |
+| `faithfulness` | `1.000` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `6.358` |
+| `evidence_count` | `3` |
+| `join_count` | `1` |
+| `context_tokens` | `24` |
+| `prompt_tokens` | `59` |
+| `cited_ids` | `E3, E1, E2` |
 | `error` | `[none]` |
 
 ## Example 3
@@ -749,14 +810,16 @@ Please list the zip code of all the charter schools in Fresno County Office of E
 **Response**
 
 ```text
-I don't have access to a current database or dataset containing specific zip codes for charter schools in Fresno County Office of Education. To get this information, I'd recommend:
+I don't have access to a current database or dataset containing specific information about charter schools in Fresno County Office of Education, including their zip codes. 
+
+To get this information, I'd recommend:
 
 1. **Fresno County Office of Education website** - They likely maintain a directory of charter schools in their jurisdiction
-2. **California Department of Education's school directory** - This would have comprehensive data on all public schools including charters
-3. **DataQuest (CDE's data reporting system)** - Contains detailed school information including addresses and zip codes
-4. **Contacting Fresno County Office of Education directly** - They would have the most up-to-date and accurate information
+2. **California Department of Education's school directory** - This would have comprehensive information about all public schools, including charter schools, with addresses and zip codes
+3. **DataQuest (California Department of Education)** - Their online data reporting system
+4. **Contacting Fresno County Office of Education directly** - They can provide the most current and accurate list
 
-I cannot provide the specific zip codes you're looking for without access to current data sources. If you have a specific dataset you'd like me to analyze, please share it and I'll be happy to help extract that information.
+I apologize that I cannot provide the specific zip codes you're looking for, but these sources should give you the complete and up-to-date information you need.
 ```
 
 **Scoring Metrics**
@@ -766,7 +829,8 @@ I cannot provide the specific zip codes you're looking for without access to cur
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `4.293` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.4` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `0` |
@@ -794,11 +858,11 @@ Please list the zip code of all the charter schools in Fresno County Office of E
 **Response**
 
 ```text
-I cannot answer this question using only the provided rows. The data shown is only for schools in Alameda County Office of Education (County Code "01"), but the question asks about charter schools in Fresno County Office of Education. Additionally, the provided data does not include zip code information for any of the schools - the zip code field is not present in these rows.
+I cannot answer this question using only the provided rows. The data shown is only for schools in Alameda County Office of Education (County Code "01"), but the question asks about charter schools in Fresno County Office of Education. Additionally, none of the provided rows contain zip code information - the data includes school names, enrollment figures, and meal program statistics, but no zip codes are present in any of the columns.
 
 To answer this question, I would need:
-1. Rows containing data for Fresno County Office of Education
-2. Data that includes zip code information for the schools
+1. Rows from schools in Fresno County Office of Education
+2. Data that includes zip code information
 ```
 
 **Scoring Metrics**
@@ -808,7 +872,8 @@ To answer this question, I would need:
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `4.974` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `3.683` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `397` |
@@ -846,9 +911,9 @@ Please list the zip code of all the charter schools in Fresno County Office of E
 **Response**
 
 ```text
-Based on the provided data, I cannot answer this question about charter schools in Fresno County Office of Education.
+I cannot answer this question using only the provided data. The rows shown are all from Alameda County Office of Education, but the question asks specifically about charter schools in Fresno County Office of Education. There are no rows in the provided data that contain information about Fresno County Office of Education or any schools located there.
 
-The data provided only contains information about schools in Alameda County Office of Education. All the schools in the provided rows are located in Alameda County, not Fresno County. To answer your question about charter schools in Fresno County Office of Education, I would need data rows that specifically contain information about schools in Fresno County.
+To answer this question, I would need data rows that include schools from Fresno County Office of Education.
 ```
 
 **Scoring Metrics**
@@ -858,7 +923,8 @@ The data provided only contains information about schools in Alameda County Offi
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `2.414` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.903` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `858` |
@@ -903,11 +969,11 @@ Please list the zip code of all the charter schools in Fresno County Office of E
 **Response**
 
 ```text
-I cannot answer this question confidently from the information provided. 
+I cannot answer this question confidently from the provided information. 
 
-While I can see the schema includes the necessary columns (Zip code in the schools table, County information, and Charter status), the sample data only shows schools from Alameda County Office of Education, not Fresno County Office of Education. Without sample rows showing schools from Fresno County, I cannot determine which schools there are charter schools or provide their zip codes.
+While I can see the schema includes the necessary columns (Zip code in the schools table, County information, and Charter status), the sample data provided only shows schools from Alameda County, not Fresno County. To answer your question about charter schools in Fresno County Office of Education, I would need to see actual data rows that contain schools from Fresno County.
 
-To answer this question, I would need sample data that includes schools from Fresno County Office of Education.
+The sample data shows charter schools from Alameda County Office of Education, but no examples from Fresno County Office of Education.
 ```
 
 **Scoring Metrics**
@@ -917,7 +983,8 @@ To answer this question, I would need sample data that includes schools from Fre
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `3.73` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `3.367` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `1015` |
@@ -934,12 +1001,12 @@ Use only the following LakePrompt evidence rows to answer the question.
 If the evidence is insufficient, say so.
 
 Evidence:
-E6: {"Zip": "93662"}
-E2: {"Zip": "93726-5208"}
-E5: {"Zip": "93706-2611"}
-E1: {"Zip": "93706-2819"}
 E4: {"Zip": "93628-9602"}
+E2: {"Zip": "93726-5208"}
 E3: {"Zip": "93726-5309"}
+E1: {"Zip": "93706-2819"}
+E6: {"Zip": "93662"}
+E5: {"Zip": "93706-2611"}
 
 Question:
 Please list the zip code of all the charter schools in Fresno County Office of Education.
@@ -950,12 +1017,12 @@ Please list the zip code of all the charter schools in Fresno County Office of E
 ```text
 The evidence is insufficient to answer this question. 
 
-While the provided evidence rows contain zip codes (93662, 93726-5208, 93706-2611, 93706-2819, 93628-9602, and 93726-5309), there is no information indicating:
+The provided evidence rows only contain zip codes (93628-9602, 93726-5208, 93726-5309, 93706-2819, 93662, and 93706-2611), but there is no information indicating:
 1. Whether these zip codes are associated with charter schools
-2. Whether they are located in Fresno County Office of Education
+2. Whether these locations are within Fresno County Office of Education
 3. Any connection between the zip codes and educational institutions
 
-To properly answer this question, I would need evidence that explicitly identifies charter schools and their relationship to the Fresno County Office of Education.
+To properly answer this question, I would need evidence that explicitly identifies charter schools and their relationship to Fresno County Office of Education.
 ```
 
 **Scoring Metrics**
@@ -963,9 +1030,10 @@ To properly answer this question, I would need evidence that explicitly identifi
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.114` |
+| `token_f1` | `1.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `8.154` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `7.886` |
 | `evidence_count` | `6` |
 | `join_count` | `1` |
 | `context_tokens` | `18` |
@@ -1014,7 +1082,7 @@ rules[2]: "Be concise.","Return only the requested JSON."
 **Response**
 
 ```text
-The zip codes of charter schools in Fresno County Office of Education are: 93706-2819, 93726-5208, 93726-5309, 93628-9602, 93706-2611, and 93662.
+93706-2819, 93726-5208, 93726-5309, 93628-9602, 93706-2611, 93662
 ```
 
 **Scoring Metrics**
@@ -1022,9 +1090,10 @@ The zip codes of charter schools in Fresno County Office of Education are: 93706
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.400` |
+| `token_f1` | `1.000` |
 | `faithfulness` | `1.000` |
-| `latency_seconds` | `5.043` |
+| `semantic_score` | `0.5` |
+| `latency_seconds` | `4.567` |
 | `evidence_count` | `6` |
 | `join_count` | `1` |
 | `context_tokens` | `18` |
@@ -1080,7 +1149,8 @@ Without this data, I cannot determine which school has the highest FRPM count or
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `2.973` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `3.274` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `0` |
@@ -1108,7 +1178,13 @@ What is the unabbreviated mailing street address of the school with the highest 
 **Response**
 
 ```text
-I cannot answer this question using only the provided rows. The table data includes FRPM counts for K-12 students, and I can see that FAME Public Charter has the highest FRPM Count (K-12) at 715.0 students. However, the table does not contain any mailing street address information - abbreviated or unabbreviated - for any of the schools listed.
+I cannot answer this question using only the provided rows. The data includes FRPM counts for K-12 students for three schools:
+
+- FAME Public Charter: 715.0 (highest)
+- Envision Academy for Arts & Technology: 186.0
+- Aspire California College Preparatory Academy: 175.0
+
+While I can identify that FAME Public Charter has the highest FRPM count for K-12 students (715.0), the provided table rows do not contain any mailing street address information for any of the schools. The data only includes school identification codes, names, enrollment figures, meal program statistics, and administrative details, but no address fields.
 ```
 
 **Scoring Metrics**
@@ -1116,9 +1192,10 @@ I cannot answer this question using only the provided rows. The table data inclu
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.032` |
+| `token_f1` | `0.250` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `3.444` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.119` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `397` |
@@ -1156,7 +1233,7 @@ What is the unabbreviated mailing street address of the school with the highest 
 **Response**
 
 ```text
-Looking at the FRPM data from the frpm table, I need to find the school with the highest "FRPM Count (K-12)" value:
+Looking at the FRPM data from the frpm table, I need to find the school with the highest "FRPM Count (K-12)":
 
 - FAME Public Charter: 715.0
 - Envision Academy for Arts & Technology: 186.0  
@@ -1177,9 +1254,10 @@ Therefore, the unabbreviated mailing street address of the school with the highe
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.017` |
+| `token_f1` | `0.250` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `4.279` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `5.415` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `858` |
@@ -1230,13 +1308,13 @@ Looking at the data provided, I can see the FRPM Count (K-12) values for the sch
 - Envision Academy for Arts & Technology: 186.0  
 - Aspire California College Preparatory Academy: 175.0
 
-From this sample, FAME Public Charter has the highest FRPM count for K-12 students with 715.0.
+From this sample, FAME Public Charter has the highest FRPM count for K-12 students at 715.0.
 
 Looking at the schools table for FAME Public Charter (CDSCode: 01100170109835), the unabbreviated mailing street address is:
 
 **39899 Balentine Drive, Suite 335**
 
-However, I should note that I can only answer based on the sample rows provided. There may be other schools in the complete dataset with higher FRPM counts that aren't shown in these sample rows, so I cannot answer with complete confidence that this is the school with the highest FRPM count across the entire dataset.
+However, I should note that I can only answer based on the sample rows provided. There may be other schools in the complete dataset with higher FRPM counts that aren't shown in these sample rows, so I cannot confidently say this is the school with the highest FRPM count across the entire dataset.
 ```
 
 **Scoring Metrics**
@@ -1244,9 +1322,10 @@ However, I should note that I can only answer based on the sample rows provided.
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.015` |
+| `token_f1` | `0.250` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `4.824` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.678` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `1015` |
@@ -1277,10 +1356,10 @@ The evidence is insufficient to answer this question.
 The provided evidence (E1) only contains a single street address "1011 Union Street" without any information about:
 - Which school this address belongs to
 - FRPM (Free and Reduced Price Meal) counts for any schools
-- K-12 student data
-- Multiple schools to compare FRPM counts
+- K-12 student enrollment data
+- Whether this is even related to a school
 
-To answer the question about which school has the highest FRPM count for K-12 students and what its unabbreviated mailing street address is, I would need evidence containing FRPM data for multiple schools along with their corresponding mailing addresses.
+To answer the question about which school has the highest FRPM count for K-12 students and what its unabbreviated mailing street address is, I would need evidence that includes FRPM data for multiple schools along with their corresponding mailing addresses.
 ```
 
 **Scoring Metrics**
@@ -1288,9 +1367,10 @@ To answer the question about which school has the highest FRPM count for K-12 st
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.021` |
+| `token_f1` | `0.250` |
 | `faithfulness` | `1.000` |
-| `latency_seconds` | `8.112` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `7.735` |
 | `evidence_count` | `1` |
 | `join_count` | `1` |
 | `context_tokens` | `5` |
@@ -1343,9 +1423,10 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.286` |
+| `token_f1` | `0.250` |
 | `faithfulness` | `1.000` |
-| `latency_seconds` | `4.514` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.322` |
 | `evidence_count` | `1` |
 | `join_count` | `1` |
 | `context_tokens` | `5` |
@@ -1385,19 +1466,20 @@ Please list the phone numbers of the direct charter-funded schools that are open
 **Response**
 
 ```text
-I don't have access to any data about charter-funded schools, their opening dates, or their phone numbers. To answer your question about direct charter-funded schools that opened after January 1, 2000, I would need access to a database or dataset containing:
+I don't have access to a database or dataset containing information about charter-funded schools, their opening dates, or their phone numbers. To answer your question about direct charter-funded schools that opened after January 1, 2000, I would need access to:
 
-- School names and types (specifically identifying direct charter-funded schools)
-- Opening/establishment dates
-- Current phone numbers
+1. A comprehensive database of charter schools
+2. Their opening/authorization dates
+3. Their current contact information including phone numbers
+4. Classification of which schools are "direct charter-funded" (as opposed to other funding models)
 
-You might be able to find this information through:
+To find this information, you might want to check:
 - Your state's Department of Education website
-- Local school district databases
-- Charter school authorization agencies
-- Public records databases
+- National charter school databases
+- Local school district records
+- Charter school authorizer websites
 
-I cannot provide the specific phone numbers you're looking for without access to the relevant data.
+If you have access to a specific dataset with this information, please share it and I'd be happy to help analyze it.
 ```
 
 **Scoring Metrics**
@@ -1407,7 +1489,8 @@ I cannot provide the specific phone numbers you're looking for without access to
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `3.604` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `4.125` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `0` |
@@ -1438,16 +1521,16 @@ Please list the phone numbers of the direct charter-funded schools that are open
 Looking at the provided data, I need to identify schools that are:
 1. Charter schools (Charter = "1")
 2. Directly funded (FundingType = "Directly funded") 
-3. Opened after 2000/1/1 (OpenDate after 2000-01-01)
+3. Opened after 2000/1/1
+4. Have phone numbers available
 
 From the three rows provided:
 
 1. First row: Not a charter school (Charter = null)
-2. Second row: FAME Public Charter - Charter = "1", FundingType = "Directly funded", OpenDate = "2005-08-29" (after 2000), but Phone = null
-3. Third row: Envision Academy for Arts & Technology - Charter = "1", FundingType = "Directly funded", OpenDate = "2006-08-28" (after 2000), Phone = "(510) 596-8901"
+2. Second row: FAME Public Charter - Charter school, directly funded, opened 2005-08-29 (after 2000/1/1), but Phone = null
+3. Third row: Envision Academy for Arts & Technology - Charter school, directly funded, opened 2006-08-28 (after 2000/1/1), Phone = "(510) 596-8901"
 
-**Answer:**
-Based on the provided data, there is one direct charter-funded school opened after 2000/1/1 with a phone number:
+**Answer:** Based on the provided data, there is one direct charter-funded school opened after 2000/1/1 with an available phone number:
 
 - Envision Academy for Arts & Technology: (510) 596-8901
 
@@ -1459,9 +1542,10 @@ Note: FAME Public Charter also meets the criteria but does not have a phone numb
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.004` |
+| `token_f1` | `0.002` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `4.987` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `5.227` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `374` |
@@ -1522,9 +1606,10 @@ Based on the available data, here are the phone numbers for direct charter-funde
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.004` |
+| `token_f1` | `0.002` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `3.805` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `3.937` |
 | `evidence_count` | `3` |
 | `join_count` | `0` |
 | `context_tokens` | `858` |
@@ -1592,7 +1677,7 @@ Based on the sample data provided, only one direct charter-funded school opened 
 
 **Envision Academy for Arts & Technology: (510) 596-8901**
 
-Note: This answer is based only on the sample rows provided. The complete dataset may contain additional schools that meet these criteria.
+Note: This answer is based only on the sample rows provided. There may be additional schools in the complete dataset that meet these criteria.
 ```
 
 **Scoring Metrics**
@@ -1600,9 +1685,10 @@ Note: This answer is based only on the sample rows provided. The complete datase
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.004` |
+| `token_f1` | `0.002` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `5.524` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `5.927` |
 | `evidence_count` | `0` |
 | `join_count` | `0` |
 | `context_tokens` | `1015` |
@@ -1619,26 +1705,26 @@ Use only the following LakePrompt evidence rows to answer the question.
 If the evidence is insufficient, say so.
 
 Evidence:
-E12: {"Phone": "(310) 410-9940"}
-E17: {"Phone": "(909) 307-6312"}
-E20: {"Phone": "(619) 265-2411"}
-E16: {"Phone": "(530) 581-1036"}
 E13: {"Phone": "(310) 392-8751"}
-E5: {"Phone": "(530) 247-7307"}
-E9: {"Phone": "(310) 425-1605"}
-E1: {"Phone": "(559) 278-8263"}
 E10: {"Phone": "(800) 985-0770"}
-E15: {"Phone": "(619) 498-8830"}
-E18: {"Phone": "(408) 729-1981"}
-E8: {"Phone": "(916) 286-1902"}
 E6: {"Phone": "(559) 490-4290"}
-E14: {"Phone": "(408) 337-5445"}
-E7: {"Phone": "(619) 303-2782"}
-E11: {"Phone": "(626) 241-3057"}
+E15: {"Phone": "(619) 498-8830"}
 E2: {"Phone": "(916) 979-1788"}
-E3: {"Phone": "(714) 558-2787"}
+E14: {"Phone": "(408) 337-5445"}
+E16: {"Phone": "(530) 581-1036"}
+E18: {"Phone": "(408) 729-1981"}
 E4: {"Phone": "(559) 305-7565"}
+E20: {"Phone": "(619) 265-2411"}
 E19: {"Phone": "(213) 377-5708"}
+E9: {"Phone": "(310) 425-1605"}
+E7: {"Phone": "(619) 303-2782"}
+E8: {"Phone": "(916) 286-1902"}
+E11: {"Phone": "(626) 241-3057"}
+E1: {"Phone": "(559) 278-8263"}
+E17: {"Phone": "(909) 307-6312"}
+E5: {"Phone": "(530) 247-7307"}
+E12: {"Phone": "(310) 410-9940"}
+E3: {"Phone": "(714) 558-2787"}
 
 Question:
 Please list the phone numbers of the direct charter-funded schools that are opened after 2000/1/1.
@@ -1649,7 +1735,7 @@ Please list the phone numbers of the direct charter-funded schools that are open
 ```text
 The evidence is insufficient to answer this question. 
 
-The provided evidence rows only contain phone numbers, but they do not include any information about:
+The provided evidence rows only contain phone numbers, but do not include any information about:
 - Whether these are charter-funded schools
 - Whether they are direct charter-funded schools specifically
 - When these schools were opened
@@ -1665,7 +1751,8 @@ To answer the question about direct charter-funded schools opened after 2000/1/1
 | `exact_match` | `False` |
 | `token_f1` | `0.000` |
 | `faithfulness` | `0.000` |
-| `latency_seconds` | `16.733` |
+| `semantic_score` | `0.0` |
+| `latency_seconds` | `16.805` |
 | `evidence_count` | `20` |
 | `join_count` | `1` |
 | `context_tokens` | `80` |
@@ -1737,9 +1824,10 @@ rules[2]: "Be concise.","Return only the requested JSON."
 | Metric | Value |
 | --- | --- |
 | `exact_match` | `False` |
-| `token_f1` | `0.055` |
+| `token_f1` | `0.028` |
 | `faithfulness` | `1.000` |
-| `latency_seconds` | `13.496` |
+| `semantic_score` | `0.5` |
+| `latency_seconds` | `13.958` |
 | `evidence_count` | `20` |
 | `join_count` | `1` |
 | `context_tokens` | `80` |
