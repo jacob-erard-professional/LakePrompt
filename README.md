@@ -1,3 +1,8 @@
+# FOR CS4964 INSTRUCTORS
+
+Final project video: https://www.youtube.com/watch?v=WTw-CfKQz2Y  
+Final project report: https://docs.google.com/document/d/18_QpkRfaMsjdLDJJc2h_Xb8v9faGFAYT-95sEH-TGfY/edit?usp=sharing
+
 # LakePrompt
 
 LakePrompt is a Python research prototype for answering natural-language questions over a local directory of CSV files. It profiles columns, retrieves schema signals, plans joins, executes SQL over a local SQLite database, packages evidence for an LLM, and returns grounded answers with citations.
