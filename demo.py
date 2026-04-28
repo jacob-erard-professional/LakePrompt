@@ -9,18 +9,13 @@ from lakeprompt import LakePrompt
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run a simple LakePrompt demo against a local CSV lake or remote source URL.",
+        description="Run a simple LakePrompt demo against a local CSV lake.",
     )
-    source_group = parser.add_mutually_exclusive_group(required=True)
-    source_group.add_argument(
+    parser.add_argument(
         "--lake-dir",
+        required=True,
         type=str,
         help="Path to a local directory containing CSV files.",
-    )
-    source_group.add_argument(
-        "--source-url",
-        type=str,
-        help="Remote source URL: direct CSV, ZIP, or GitHub repository URL.",
     )
     parser.add_argument(
         "--question",
@@ -52,12 +47,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Disable default summary-cache persistence for this run.",
     )
     parser.add_argument(
-        "--source-cache-dir",
-        type=str,
-        default=None,
-        help="Optional cache directory for remote source preparation.",
-    )
-    parser.add_argument(
         "--logger",
         action="store_true",
         help="Print LakePrompt pipeline traces to stdout.",
@@ -76,16 +65,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _build_lakeprompt(args: argparse.Namespace) -> LakePrompt:
-    if args.source_url:
-        return LakePrompt.from_url(
-            source_url=args.source_url,
-            model=args.model,
-            cache_path=args.cache_path,
-            cache_dir=args.cache_dir,
-            save_artifacts=not args.no_save_artifacts,
-            source_cache_dir=args.source_cache_dir,
-            logger=args.logger,
-        )
     return LakePrompt(
         lake_dir=args.lake_dir,
         model=args.model,

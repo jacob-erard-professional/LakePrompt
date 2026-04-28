@@ -9,7 +9,6 @@ from typing import Any
 import anthropic
 
 from ._datalake import DataLake
-from ._ingest import _DataLakePreparer
 from ._llm_utilities import DEFAULT_CLAUDE_MODEL, plan_llm_query
 from ._models import LakeAnswer, QueryPlan
 from ._profiler import LakeProfiler
@@ -90,54 +89,6 @@ class LakePrompt:
         self.executor = TupleExecutor(self.lake, logger=self.logger)
         self.packager = ContextPackager()
         self.packager.logger = self.logger
-
-    @classmethod
-    def from_url(
-        cls,
-        source_url: str,
-        model: str = DEFAULT_CLAUDE_MODEL,
-        cache_path: str = None,
-        cache_dir: str | None = None,
-        save_artifacts: bool = True,
-        source_cache_dir: str | None = None,
-        logger: bool = False,
-    ) -> "LakePrompt":
-        """
-        Prepare a supported remote data source into a local CSV lake and load it.
-
-        Supported sources:
-        - direct CSV links
-        - ZIP archives containing CSV files
-        - GitHub repository URLs
-
-        This constructor is needed because many public datasets are hosted
-        remotely rather than already normalized as a local CSV directory.
-
-        Args:
-            source_url: Remote HTTP(S) URL describing the data source.
-            model: Model used for summary generation and answering.
-            cache_path: Optional path for cached table summaries.
-            source_cache_dir: Optional local cache directory for downloaded
-                source material.
-
-        Returns:
-            A fully initialized `LakePrompt` instance backed by the prepared
-            local lake.
-        """
-        preparer = _DataLakePreparer(cache_root=source_cache_dir)
-        prepared = preparer.prepare(source_url)
-        instance = cls(
-            lake_dir=str(prepared.prepared_dir),
-            model=model,
-            cache_path=cache_path,
-            cache_dir=cache_dir,
-            save_artifacts=save_artifacts,
-            logger=logger,
-        )
-        instance.source_url = source_url
-        instance.prepared_lake_dir = str(prepared.prepared_dir)
-        instance.prepared_source_type = prepared.source_type
-        return instance
 
     def query(self, question: str) -> LakeAnswer:
         """
