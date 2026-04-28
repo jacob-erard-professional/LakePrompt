@@ -67,7 +67,9 @@ class _DataLakePreparer:
             A `_PreparedLake` describing the prepared local dataset.
         """
         source_type = self._detect_source_type(source_url)
-        lake_id = hashlib.sha256(source_url.encode("utf-8")).hexdigest()[:16]
+        lake_id = hashlib.sha256(
+            f"prepared-lake-v2:{source_type}:{source_url}".encode("utf-8")
+        ).hexdigest()[:16]
         target_dir = self.cache_root / lake_id / "lake"
 
         if target_dir.exists() and any(target_dir.glob("*.csv")):
@@ -115,12 +117,12 @@ class _DataLakePreparer:
 
         if parsed.scheme not in {"http", "https"}:
             raise ValueError("Only http and https URLs are supported.")
-        if parsed.netloc == "github.com":
-            return "github"
         if lower_path.endswith(".csv"):
             return "csv"
         if lower_path.endswith(".zip"):
             return "zip"
+        if parsed.netloc == "github.com":
+            return "github"
         raise ValueError(
             "Unsupported URL. Expected a GitHub repo URL, direct .csv link, or direct .zip link."
         )
