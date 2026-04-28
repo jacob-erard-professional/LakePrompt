@@ -4,6 +4,10 @@ LakePrompt is a Python research prototype for answering natural-language questio
 
 LakePrompt is now local-only. It does not download or prepare data from GitHub, ZIP URLs, or other remote sources. You must point it at a directory of CSV files already present on disk.
 
+If you need example data to try locally, you can manually download the Spider Join dataset here:
+
+- `https://github.com/superctj/spider-join-data/raw/main/data.zip`
+
 ## Quick Start
 
 ```bash
@@ -18,7 +22,7 @@ python -m pip install -r requirements.txt
 export ANTHROPIC_API_KEY="your_api_key_here"
 export HF_TOKEN="your_hf_token_here"
 
-python3 demo.py --lake-dir ./data/department_management
+python3 demo.py --lake-dir /path/to/your/csv_directory
 ```
 
 After initialization, `demo.py` drops into an interactive prompt. Type a question, or `q` to quit.
@@ -26,8 +30,8 @@ After initialization, `demo.py` drops into an interactive prompt. Type a questio
 Example:
 
 ```text
-> What are the distinct creation years of the departments managed by a secretary born in state 'Alabama'?
-> Which department has more than 1 head at a time? List the id, name and the number of heads.
+> Ask a question about the CSV files in your local lake
+> Ask another question
 > q
 ```
 
@@ -79,14 +83,12 @@ Main entry points:
 from lakeprompt import LakePrompt
 
 lp = LakePrompt(
-    lake_dir="./data/department_management",
+    lake_dir="/path/to/your/csv_directory",
     model="claude-sonnet-4-20250514",
     logger=True,
 )
 
-answer = lp.query(
-    "What are the distinct creation years of the departments managed by a secretary born in state 'Alabama'?"
-)
+answer = lp.query("Ask a question about your local data")
 print(answer.text)
 print(answer.cited_ids)
 print(answer.evidence)
@@ -95,7 +97,7 @@ print(answer.evidence)
 ### CLI
 
 ```bash
-python3 demo.py --lake-dir ./data/department_management
+python3 demo.py --lake-dir /path/to/your/csv_directory
 ```
 
 Useful flags:
